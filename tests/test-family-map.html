@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>test: family map layout</title>
+  <style>
+    body { background: #0a0e27; color: #f8f5f0; font: 14px/1.5 monospace; padding: 24px; }
+    .pass { color: #5eead4; } .fail { color: #fb7185; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h1>familyMapLayout.js — pure region-grouping assertions</h1>
+  <div id="output">Running…</div>
+
+  <script type="module">
+    import { normalizePerson } from '../js/data/schema.js';
+    import { computeFamilyMapLayout, familyMapBounds } from '../js/starmap/familyMapLayout.js';
+
+    const results = [];
+    const check = (label, actual, expected) => results.push({ label, actual, expected, pass: JSON.stringify(actual) === JSON.stringify(expected) });
+
+    // --- a small synthetic family: one founder couple + a child, split across two regions ---
+    const synthetic = [
+      { id: 'gf', role: 'blood', isFounder: true, partnerOf: 'gm', generation: 0, parents: [], region: 'Home' },
+      { id: 'gm', role: 'blood', isFounder: true, partnerOf: 'gf', generation: 0, parents: [], region: 'Home' },
+      { id: 'kid', role: 'blood', isFounder: false, partnerOf: null, generation: 1, parents: ['gf', 'gm'], region: 'Away' },
+      { id: 'kidspouse', role: 'spouse', isFounder: false, partnerOf: 'kid', generation: 1, parents: [], region: 'Away' },
+    ];
+
+    const { positions, founderGroups, blobs } = computeFamilyMapLayout(synthetic);
+    check('every person gets a position', [...positions.keys()].sort(), ['gf', 'gm', 'kid', 'kidspouse'].sort());
+    check('exactly one founder group', founderGroups.length, 1);
+    check('founder group has both founders', founderGroups[0].personIds.slice().sort(), ['gf', 'gm']);
+    check('founders share one anchor (one black hole)', positions.get('gf').x, positions.get('gm').x);
+    check('gf/gm are flagged isBlackHole', [positions.get('gf').isBlackHole, positions.get('gm').isBlackHole], [true, true]);
+    check('kid is not a black hole', positions.get('kid').isBlackHole, false);
+    check('two regions -> two blobs', blobs.length, 2);
+    check('blob region names', blobs.map((b) => b.region).sort(), ['Away', 'Home']);
+
+    // Home cluster (gf, gm) and Away cluster (kid, kidspouse) should sit far enough apart that
+    // their blobs don't overlap: distance between blob centers >= sum of their radii.
+    const [home, away] = blobs[0].region === 'Home' ? [blobs[0], blobs[1]] : [blobs[1], blobs[0]];
+    const centerDistance = Math.abs(home.x - away.x);
+    check('region blobs do not overlap', centerDistance >= home.radius + away.radius - 0.01, true);
+
+    // No orbit rings in map mode: every position has orbitRadius 0.
+    check('nobody has an orbit radius in map mode', [...positions.values()].every((p) => p.orbitRadius === 0), true);
+
+    // --- no data ---
+    check('empty family -> no positions, no blobs', computeFamilyMapLayout([]), { positions: new Map(), founderGroups: [], blobs: [] });
+    check('familyMapBounds of an empty family is null', familyMapBounds([]), null);
+
+    // --- someone with no region falls into "Elsewhere" rather than being dropped ---
+    const noRegion = [{ id: 'x', role: 'blood', isFounder: false, partnerOf: null, generation: 1, parents: [], region: null }];
+    check('a person with no region still gets a position', computeFamilyMapLayout(noRegion).positions.has('x'), true);
+    check('they land in a single fallback bucket', computeFamilyMapLayout(noRegion).blobs.map((b) => b.region), ['Elsewhere']);
+
+    // --- bounds actually contain everything ---
+    const bounds = familyMapBounds(synthetic);
+    check('bounds are well-formed', bounds.minX < bounds.maxX && bounds.minY < bounds.maxY, true);
+    [...positions.values()].forEach((pos) => {
+      check(`bounds contain a body at (${pos.x.toFixed(0)}, ${pos.y.toFixed(0)})`,
+        pos.x - pos.size / 2 >= bounds.minX && pos.x + pos.size / 2 <= bounds.maxX
+        && pos.y - pos.size / 2 >= bounds.minY && pos.y + pos.size / 2 <= bounds.maxY, true);
+    });
+
+    // --- against the real reference family (data/family.json, 4 invented regions) ---
+    const raw = await fetch('../data/family.json', { cache: 'no-store' }).then((r) => r.json());
+    const people = raw.people.map(normalizePerson);
+    const real = computeFamilyMapLayout(people);
+    check('real family: every one of the 24 people gets a position', real.positions.size, 24);
+    check('real family: exactly one founder group (Grandfather & Grandmother)', real.founderGroups.length, 1);
+    check('real family: four regions -> four blobs', real.blobs.length, 4);
+    check('real family: blob names match the invented regions', real.blobs.map((b) => b.region).sort(),
+      ['Across the Valley', 'The City', 'The Coast', 'The Old Farmhouse']);
+
+    // No pair of blobs should overlap.
+    let anyOverlap = false;
+    for (let i = 0; i < real.blobs.length; i++) {
+      for (let j = i + 1; j < real.blobs.length; j++) {
+        const a = real.blobs[i], b = real.blobs[j];
+        const d = Math.hypot(a.x - b.x, a.y - b.y);
+        if (d < a.radius + b.radius - 0.01) anyOverlap = true;
+      }
+    }
+    check('real family: no two region blobs overlap', anyOverlap, false);
+
+    const passCount = results.filter((r) => r.pass).length;
+    document.getElementById('output').innerHTML =
+      `<p>${passCount} / ${results.length} passed</p><ul>` +
+      results.map((r) => `<li class="${r.pass ? 'pass' : 'fail'}">${r.pass ? '✓' : '✗'} ${r.label}${r.pass ? '' : ` (expected ${JSON.stringify(r.expected)}, got ${JSON.stringify(r.actual)})`}</li>`).join('') +
+      '</ul>';
+  </script>
+</body>
+</html>

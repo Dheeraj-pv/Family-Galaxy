@@ -3,6 +3,7 @@
 // from the data: an unknown birth/death (null) never turns into NaN, it just drops that stat.
 
 import { isPersonPresent } from '../timeline/timelineFilter.js';
+import { milestonesInYear } from '../timeline/milestones.js';
 
 const isYear = (value) => Number.isFinite(value);
 const plural = (n, one, many = `${one}s`) => (n === 1 ? one : many);
@@ -25,6 +26,7 @@ export function ageInYear(person, year) {
  *   eldest: { name, age } | null, youngest: { name, age } | null,
  *   postcards: { total, top: { name, count, tied } | null },
  *   moments: { total, from, to } | null,
+ *   milestones: { total, names },
  * }}
  */
 export function familyStats(people, events, year, { currentYear = new Date().getFullYear() } = {}) {
@@ -59,6 +61,10 @@ export function familyStats(people, events, year, { currentYear = new Date().get
 
   const eventYears = events.map((e) => e.year).filter(isYear);
 
+  const peopleById = new Map(people.map((p) => [p.id, p]));
+  const milestoneItems = milestonesInYear(people, events, year);
+  const milestoneNames = milestoneItems.map((m) => (m.personId ? `${peopleById.get(m.personId)?.name ?? '?'} · ${m.detail}` : m.detail));
+
   return {
     year,
     total: people.length,
@@ -77,6 +83,7 @@ export function familyStats(people, events, year, { currentYear = new Date().get
     moments: events.length
       ? { total: events.length, from: eventYears.length ? Math.min(...eventYears) : null, to: eventYears.length ? Math.max(...eventYears) : null }
       : null,
+    milestones: { total: milestoneItems.length, names: milestoneNames },
   };
 }
 
@@ -144,6 +151,17 @@ export function describeStats(stats) {
       label: `${plural(total, 'Moment')} on the timeline`,
       value: String(total),
       note: from !== null ? (from === to ? String(from) : `${from} – ${to}`) : '',
+    });
+  }
+
+  if (stats.milestones.total > 0) {
+    const shown = stats.milestones.names.slice(0, 2).join('; ');
+    const more = stats.milestones.total > 2 ? `; and ${stats.milestones.total - 2} more` : '';
+    items.push({
+      key: 'milestones',
+      label: `${plural(stats.milestones.total, 'Milestone')} this year`,
+      value: String(stats.milestones.total),
+      note: `${shown}${more}`,
     });
   }
 

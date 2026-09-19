@@ -1,0 +1,47 @@
+/* Family map view (js/starmap/familyMapLayout.js + viewModeToggle.js): the "Sky / Map" toggle,
+   top-left of the star map (clear of the header, the greeting pill and the zoom stack), and the
+   plain opacity cross-fade the canvas plays while switching — a soft dissolve, not a snap cut, per
+   the emotional intent (this is the only new transition the feature needs; the region blobs and
+   labels themselves are canvas-drawn, see regionBlobRenderer.js). */
+
+#star-map-canvas {
+  transition: opacity var(--duration-timeline-fade) ease;
+}
+#star-map-canvas.is-switching-view {
+  opacity: 0;
+}
+
+.view-mode-toggle {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  z-index: 2;
+  display: flex;
+  border-radius: 999px;
+  background: rgba(26, 31, 58, 0.85);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 216, 155, 0.3);
+  overflow: hidden;
+}
+.view-mode-toggle__button {
+  padding: 8px 16px;
+  border: none;
+  background: none;
+  color: var(--color-text-secondary);
+  font-family: var(--font-body);
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: background var(--duration-corkboard-hover) ease-out, color var(--duration-corkboard-hover) ease-out;
+}
+.view-mode-toggle__button:hover { color: var(--color-text-primary); }
+.view-mode-toggle__button:focus-visible { outline: 2px solid var(--color-star-gold); outline-offset: -2px; }
+.view-mode-toggle__button[aria-pressed='true'] {
+  background: rgba(255, 216, 155, 0.18);
+  color: var(--color-star-gold);
+}
+
+@media (max-width: 480px), (max-height: 480px) {
+  .view-mode-toggle__button { padding: 7px 12px; font-size: 0.75rem; }
+}

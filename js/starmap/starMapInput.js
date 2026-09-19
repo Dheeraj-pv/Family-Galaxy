@@ -8,6 +8,7 @@ import { emit } from '../utils/events.js';
 import { clamp } from '../utils/math.js';
 import { cancelFollow, ZOOM_MIN as MIN_SCALE, ZOOM_MAX as MAX_SCALE } from './starMapRender.js';
 import { initZoomControls } from './zoomControls.js';
+import { initViewModeToggle } from './viewModeToggle.js';
 
 const CLICK_DRAG_THRESHOLD = 6; // px of movement before a mouse press counts as a drag, not a click
 const TOUCH_DRAG_THRESHOLD = 10; // fingers jitter more than a mouse, so a tap tolerates more movement
@@ -33,6 +34,7 @@ function midpointOf(a, b) {
 
 export function initStarMapInput(canvas) {
   initZoomControls(canvas.parentElement);
+  initViewModeToggle(canvas.parentElement);
   const pointers = new Map(); // pointerId -> {x, y} in client (screen) coordinates
   let dragStart = null; // {x, y, moved, transform}
   let pinchStart = null; // {distance, midpoint, transform} — fixed at gesture start, not updated per-move

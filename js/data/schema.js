@@ -22,6 +22,7 @@ export function normalizePerson(raw) {
     familyRole: raw.familyRole ?? '', // display label e.g. "Eldest Uncle" — NOT the blood/spouse `role` above
     color: raw.color ?? null, // explicit spouse-planet hue (hex); blood stars ignore this — see CLAUDE.md
     birthday: raw.birthday ?? null, // optional "MM-DD" (month-day of the birth year in `birth`), for anniversary greetings
+    region: raw.region ?? null, // optional short place label ("The Old Farmhouse"), for the family map view — see CLAUDE.md
   };
 }
 

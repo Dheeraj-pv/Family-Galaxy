@@ -81,8 +81,9 @@ export function orbitalAngleOffset(orbitRadius, timeMs) {
 
 // Groups founders into couples by MUTUAL partnerOf (each points at the other) — see CLAUDE.md
 // "Data shape" field notes. A founder with no reciprocal partner in the data becomes its own
-// single-person group rather than being dropped.
-function groupFounders(founders) {
+// single-person group rather than being dropped. Exported so familyMapLayout.js (the family-map
+// view's alternate layout) can reuse the exact same couple-pairing rule instead of duplicating it.
+export function groupFounders(founders) {
   const byId = new Map(founders.map((f) => [f.id, f]));
   const grouped = new Set();
   const groups = [];

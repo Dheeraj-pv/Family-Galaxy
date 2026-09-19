@@ -11,6 +11,7 @@ const state = {
   selectedPersonId: null,
   viewportTransform: { x: 0, y: 0, scale: 1 },
   reducedMotion: false,
+  viewMode: 'sky', // 'sky' (lineage/orbits) | 'map' (grouped by person.region) — see familyMapLayout.js
 };
 
 export function getPeople() {
@@ -53,4 +54,11 @@ export function getReducedMotion() {
 }
 export function setReducedMotion(reducedMotion) {
   state.reducedMotion = reducedMotion;
+}
+
+export function getViewMode() {
+  return state.viewMode;
+}
+export function setViewMode(viewMode) {
+  state.viewMode = viewMode;
 }

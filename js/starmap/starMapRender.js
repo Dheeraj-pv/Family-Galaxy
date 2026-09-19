@@ -4,10 +4,12 @@
 // per-star twinkle and the staggered orbit-ring draw-in on first load, both driven by a
 // requestAnimationFrame loop that respects prefers-reduced-motion (see CLAUDE.md "Motion").
 
-import { getPeople, getViewportTransform, setViewportTransform, setSelectedPersonId, getReducedMotion, getPlayheadYear } from '../state.js';
+import { getPeople, getEvents, getViewportTransform, setViewportTransform, setSelectedPersonId, getReducedMotion, getPlayheadYear, getViewMode } from '../state.js';
 import { on, emit } from '../utils/events.js';
 import { clamp, lerp } from '../utils/math.js';
 import { computeStarMapLayout, layoutBounds, fitViewForBounds } from './orbitMath.js';
+import { computeFamilyMapLayout, familyMapBounds } from './familyMapLayout.js';
+import { drawRegionBlob } from './regionBlobRenderer.js';
 import { drawOrbitRing } from './orbitRingRenderer.js';
 import { drawBlackHole } from './blackHoleRenderer.js';
 import { drawStar, twinkleGlowStrength } from './starRenderer.js';
@@ -19,6 +21,7 @@ import { personOpacityForYear, FADED_OPACITY, PRESENT_OPACITY, TIMELINE_FADE_MS 
 import { relatedIds, describeRelations, FOCUS_DIM } from './relations.js';
 import { announce } from '../a11y/announcer.js';
 import { drawShootingStars } from './shootingStar.js';
+import { milestonesInYear } from '../timeline/milestones.js';
 
 // Manual zoom limits, shared with starMapInput.js and zoomControls.js.
 export const ZOOM_MIN = 0.3;
@@ -59,6 +62,16 @@ let highlightIds = null;
 let pathIds = null;
 const displayFocus = new Map();
 
+// Milestone constellation: whoever is turning a round-number age (or hitting a round-number event
+// anniversary) in the playhead year gets a quiet gold ring. Recomputed only when the year or the
+// underlying data changes, not every frame — see updateMilestones below.
+let milestonePersonIds = new Set();
+function updateMilestones() {
+  const items = milestonesInYear(getPeople(), getEvents(), getPlayheadYear());
+  milestonePersonIds = new Set(items.filter((i) => i.personId).map((i) => i.personId));
+  render();
+}
+
 // Camera-follow state. followTarget is the personId the camera is actively tracking (re-centers
 // on it every frame, since it may be orbiting); followTransition drives the eased fly-to/fly-back
 // animation. preFollowTransform snapshots the camera from before following started, so releasing
@@ -87,10 +100,15 @@ export function initStarMap(canvasEl) {
   on('dataReady', () => {
     applyFitViewIfPristine();
     revealStartTime = performance.now();
+    updateMilestones();
     startAnimationLoop();
   });
   on('viewportChanged', () => { userAdjustedView = true; render(); });
-  on('playheadChanged', () => startAnimationLoop());
+  // Switching sky <-> family map reframes the same way a resize does: only if the user hasn't
+  // manually panned/zoomed, and without yanking the camera out from under an active follow.
+  on('viewModeChanged', () => { userAdjustedView = false; applyFitViewIfPristine(); render(); });
+  on('playheadChanged', () => { updateMilestones(); startAnimationLoop(); });
+  ['eventAdded', 'eventEdited', 'eventDeleted'].forEach((name) => on(name, updateMilestones));
   on('postcardAdded', () => render());
   on('postcardEdited', () => render());
   on('postcardDeleted', () => render());
@@ -134,13 +152,15 @@ function clearHighlight() {
 }
 
 // Frames the whole tree in the canvas (see fitViewForBounds in orbitMath.js). If a follow is in
-// progress, the framing it will fly back to is updated instead of yanking the camera.
+// progress, the framing it will fly back to is updated instead of yanking the camera. Reads
+// whichever view (sky or family map) is current so the fit always matches what's on screen.
 function applyFitViewIfPristine() {
   if (userAdjustedView) return;
   const people = getPeople();
   if (people.length === 0) return;
   const rect = canvas.getBoundingClientRect();
-  const fit = fitViewForBounds(layoutBounds(people), { width: rect.width, height: rect.height }, { minScale: ZOOM_MIN });
+  const bounds = getViewMode() === 'map' ? familyMapBounds(people) : layoutBounds(people);
+  const fit = fitViewForBounds(bounds, { width: rect.width, height: rect.height }, { minScale: ZOOM_MIN });
   if (followTarget !== null) { preFollowTransform = fit; return; }
   if (followTransition?.releaseTo) { followTransition.releaseTo = fit; return; }
   setViewportTransform(fit);
@@ -315,9 +335,14 @@ export function render() {
 
   const reducedMotion = getReducedMotion();
   const now = performance.now();
-  // Orbital drift is continuous ambient motion, same category as twinkle/parallax — frozen
-  // under reduced motion by passing timeMs=0 (every orbit sits at its static base angle).
-  const { positions, founderGroups } = computeStarMapLayout(people, reducedMotion ? 0 : now);
+  const mapMode = getViewMode() === 'map';
+  // Family map mode groups by region instead of lineage (no orbits to drift there — it's a
+  // static arrangement, see familyMapLayout.js). Otherwise: orbital drift is continuous ambient
+  // motion, same category as twinkle/parallax — frozen under reduced motion by passing timeMs=0
+  // (every orbit sits at its static base angle).
+  const { positions, founderGroups, blobs } = mapMode
+    ? computeFamilyMapLayout(people)
+    : { ...computeStarMapLayout(people, reducedMotion ? 0 : now), blobs: [] };
   lastPositions = positions;
 
   updateFollowCamera(positions, now);
@@ -335,6 +360,8 @@ export function render() {
   ctx.save();
   ctx.translate(originX, originY);
   ctx.scale(scale, scale);
+
+  blobs.forEach((blob) => drawRegionBlob(ctx, blob));
 
   // A ring stays as bright as the brightest body sharing it (siblings on one ring), so a ring
   // only dims once everyone on it is absent from the playhead year.
@@ -388,6 +415,22 @@ export function render() {
     ctx.save();
     ctx.globalAlpha = opacityOf(person.id);
     drawPostcardMarker(ctx, pos, person.id, now, reducedMotion);
+    ctx.restore();
+  });
+
+  // Milestone rings: founders share one (they share one black hole), same dedup as the envelopes above.
+  const milestoneMarked = new Set();
+  people.forEach((person) => {
+    if (!milestonePersonIds.has(person.id)) return;
+    const pos = positions.get(person.id);
+    if (!pos) return;
+    if (pos.isBlackHole) {
+      if (milestoneMarked.has(pos.groupId)) return;
+      milestoneMarked.add(pos.groupId);
+    }
+    ctx.save();
+    ctx.globalAlpha = opacityOf(person.id);
+    drawMilestoneRing(ctx, pos);
     ctx.restore();
   });
 
@@ -466,6 +509,26 @@ function advanceFocusFade(people, reducedMotion) {
     displayFocus.set(person.id, next);
     if (next !== target) fadeInProgress = true;
   });
+}
+
+// A quiet, static double ring (no pulse — nothing to disable under reduced motion) marking a
+// milestone birthday/anniversary in the current playhead year. Deliberately calmer than the
+// select ripple or focus ring: this is ambient information, not a response to input.
+function drawMilestoneRing(ctx, pos) {
+  const r = pos.size / 2 + 10;
+  ctx.save();
+  ctx.setLineDash([3, 5]);
+  ctx.lineWidth = 1.5;
+  ctx.strokeStyle = 'rgba(255, 216, 155, 0.75)';
+  ctx.beginPath();
+  ctx.arc(pos.x, pos.y, r, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.strokeStyle = 'rgba(255, 216, 155, 0.35)';
+  ctx.beginPath();
+  ctx.arc(pos.x, pos.y, r + 5, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
 }
 
 function drawFocusRing(ctx, pos) {

@@ -441,10 +441,72 @@ upload/edit/remove, Then & Now upload/replace on both sides with the cache-busti
 Then & Now remove-photo confirmed to clear the Storage object and the database column and revert to
 the placeholder, and cross-session persistence via `getCloudPhotoFor` confirmed on reopen after each.
 
+**Milestone constellation (added on request)**: as the timeline plays or is scrubbed, anyone turning
+a round-number age this year (every 10th birthday), or any dated event reaching a round-number
+anniversary (every 5th year), gets a quiet static double gold ring on the map — the significant years
+stand out while journeying through the family's history, not just what's coming up in real life (compare
+the anniversary greeting above, which does a similar thing but off today's real-world date rather than
+the playhead year). `js/timeline/milestones.js` is pure (`milestoneForPerson`, `milestoneForEvent`,
+`milestonesInYear`; tests: `tests/test-milestones.html`) and, found via live testing, deliberately skips
+an "X born" event once its year matches that same person's own `birth` — otherwise a birthday and its own
+birth-record event both fire as separate milestones for the same year (same duplicate the anniversary
+greeting's own `birthdaysSeen` logic already guards against, for the same reason). `starMapRender.js`
+recomputes which people have a milestone this year on `dataReady`/`playheadChanged`/`eventAdded`/
+`eventEdited`/`eventDeleted` (not every animation frame) and draws the ring (founders share one, like the
+postcard envelopes); the ring is static — nothing to disable under reduced motion. `starMapA11yMirror.js`
+names it in the hidden star list ("Mom, 60th birthday") since it's otherwise a purely visual cue, and the
+family-stats card lists "Milestones this year" when there are any.
+
+**Ambient discovery (added on request)**: every 45–90s, if nothing else has the user's attention (no
+profile card open, no story mode playing, the tab isn't backgrounded, and no shooting star is already
+flying), a warm shooting star wanders unprompted to a random person actually present in the sky that year
+who has a memory caption or a postcard note, and a quiet caption pill low in the sky ("A memory of Dad:
+“Same kitchen-table grin”") surfaces once it lands — so the galaxy feels alive to wander even when no one
+is clicking anything, not just a backdrop that waits for input. `js/starmap/ambientDiscovery.js` reuses
+the exact shooting-star visual built for postcards (`js/starmap/shootingStar.js`'s `launchShootingStar`)
+rather than inventing new motion; the picking logic (`pickAmbientCandidate`, `pickAmbientMoment`) is pure
+and takes a seeded rng for tests (`tests/test-ambient-discovery.html`). Skipped entirely under reduced
+motion. `js/timeline/timelineRibbon.js` now emits `storyPlaybackChanged {playing}` specifically so this
+feature can stand down while the story is driving the sky; the caption (`#ambient-caption`,
+`css/ambient.css`) is clickable (opens that person's card, same as the greeting pill's lines) and
+auto-hides after 6s.
+
+**Family map (added on request)**: a "Sky / Map" toggle top-left of the star map (`js/starmap/
+viewModeToggle.js`) switches between the lineage view (orbits, generations) and an alternate layout
+grouping people by a new optional field, `person.region` (a short invented place label, e.g. "The Old
+Farmhouse") — a second lens alongside the timeline's year lens, for "where is everyone" instead of "when
+was everyone". Deliberately **not** a real geographic map: that would need a mapping library and possibly
+an API key, a genuine exception to the no-heavy-dependency constraint, and would read colder/more
+"product-like" than the rest of the site. Instead it's a stylized, still-canvas-drawn view — the same
+stars/planets/black holes, same sizing rules, just grouped differently. `js/starmap/familyMapLayout.js`
+is pure (`computeFamilyMapLayout`, `familyMapBounds`; tests: `tests/test-family-map.html`): each region's
+members are scattered on a golden-angle spiral around their own local center (an organic, non-grid look),
+founder couples get their usual black hole at the center of their region (reusing `orbitMath.js`'s
+`groupFounders`), and regions are laid out left-to-right with enough gap that their soft backdrop "blobs"
+(`js/starmap/regionBlobRenderer.js` — a radial wash + a faint dashed boundary + the region's name in the
+usual italic display face, same visual register as the sky's own decorative orbit rings and nebula
+atmosphere) never overlap. There are no orbit rings or orbital drift in this view (every position has
+`orbitRadius: 0`, so the existing ring-drawing code already skips them for free) — it's a static
+arrangement. Switching modes plays a plain CSS opacity cross-fade of the canvas itself (`css/family-
+map.css`, `.is-switching-view`) rather than a snap-cut, per the emotional intent; `state.js`'s `viewMode`
++ the `viewModeChanged` bus event drive the swap, and everything that already worked generically off
+`positions` (click-to-select, the follow camera, relationship highlighting, the "how are we related?"
+path camera, postcard markers, shooting stars, milestone rings) keeps working unmodified since the map
+view produces the identical `positions`/`founderGroups` shape `computeStarMapLayout` does — only
+`relationshipPicker.js`'s own camera-framing helpers needed an explicit branch on `getViewMode()`, since
+they call the layout function directly rather than reading `starMapRender.js`'s internal state.
+`starMapA11yMirror.js` appends each person's region while this view is showing ("Mom, from The City").
+The 24-person reference family's regions are invented placeholders (four regions, split so some
+siblings' own children ended up in a different region than their parents — a small deliberate migration
+story), same treatment as the invented birth years/birthdays elsewhere; replace with real places when
+known.
+
 **Known gaps / open items**: (1) nothing has been tried on real touch hardware or with a real screen
 reader; (2) no real photos have been uploaded yet — the placeholders are still placeholders until a
 family member actually uses the upload controls; (3) a Supabase free-tier project pauses after 7 days
-with no traffic and needs manually resuming from the dashboard if that happens.
+with no traffic and needs manually resuming from the dashboard if that happens; (4) the family map's
+regions and the milestone/ambient-discovery features have only been checked by hand in one browser
+session, not on real touch hardware or with a screen reader.
 
 **Rendering technology (decided)**: **Canvas 2D**, not SVG or DOM — this is the only reading that makes
 the accessibility rule's literal "hidden DOM mirrors of canvas-rendered content" wording true. All mockup
@@ -548,6 +610,9 @@ Field notes:
   `orbitMath.js` from `generation` + `parents`/`partnerOf` + assigned angle, not authored per-person.
   Authoring manual coordinates would fight the orbit-ring layout the mockup actually specifies.
 - `birthday` (optional, "MM-DD") and event `month`/`day`/`id` (optional): feed the anniversary greeting and the add-event feature; the values in `family.json` are invented placeholders.
+- `region` (optional, new): a short invented place label ("The Old Farmhouse") feeding the family map
+  view (see "Family map" above); anyone without one is grouped into a single "Elsewhere" bucket rather
+  than dropped. Purely a display grouping — doesn't affect `orbitMath.js`'s lineage layout at all.
 - `birth`/`death` (years): the reference data had none, so **plausible years were invented** on
   request (2026-09-18) — they are placeholders, consistent with the fixture's events (Mom b.1966,
   wedding 1962, Me b.1991) and with each other (children born after parents), but not real family

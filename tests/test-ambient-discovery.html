@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>test: ambient discovery</title>
+  <style>
+    body { background: #0a0e27; color: #f8f5f0; font: 14px/1.5 monospace; padding: 24px; }
+    .pass { color: #5eead4; } .fail { color: #fb7185; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h1>ambientDiscovery.js — pure picking assertions</h1>
+  <div id="output">Running…</div>
+
+  <script type="module">
+    import { personMoments, pickAmbientCandidate, pickAmbientMoment } from '../js/starmap/ambientDiscovery.js';
+
+    const results = [];
+    const check = (label, actual, expected) => results.push({ label, actual, expected, pass: JSON.stringify(actual) === JSON.stringify(expected) });
+
+    const withMemory = { id: 'a', birth: 1960, death: null, memories: [{ type: 'thenNow', caption: 'Same laugh' }], postcards: [] };
+    const withPostcard = { id: 'b', birth: 1990, death: null, memories: [], postcards: [{ note: 'Missed you!' }] };
+    const withNothing = { id: 'c', birth: 1990, death: null, memories: [{ type: 'thenNow' }], postcards: [{}] }; // no caption/note text
+    const unborn = { id: 'd', birth: 2030, death: null, memories: [{ caption: 'x' }], postcards: [] };
+    const gone = { id: 'e', birth: 1900, death: 1950, memories: [{ caption: 'x' }], postcards: [] };
+
+    check('a memory with a caption counts as a moment', personMoments(withMemory), [{ kind: 'memory', text: 'Same laugh' }]);
+    check('a postcard with a note counts as a moment', personMoments(withPostcard), [{ kind: 'postcard', text: 'Missed you!', from: undefined }]);
+    check('an empty caption/note is not a moment', personMoments(withNothing), []);
+    check('no memories/postcards -> no moments', personMoments({ memories: [], postcards: [] }), []);
+    check('missing arrays never throw', personMoments({}), []);
+
+    const people = [withMemory, withPostcard, withNothing, unborn, gone];
+    const zero = () => 0; // deterministic rng: always picks index 0
+    check('candidates exclude the unborn, the passed, and those with nothing to discover',
+      pickAmbientCandidate(people, 2020, null, zero)?.id, 'a');
+    check('excludeId removes that one person from consideration',
+      pickAmbientCandidate([withMemory, withPostcard], 2020, 'a', zero)?.id, 'b');
+    check('no eligible candidate -> null', pickAmbientCandidate([withNothing, unborn, gone], 2020, null, zero), null);
+    check('empty family -> null, never throws', pickAmbientCandidate([], 2020, null, zero), null);
+
+    check('rng near 1 picks the last candidate', pickAmbientCandidate([withMemory, withPostcard], 2020, null, () => 0.999).id, 'b');
+
+    check('pickAmbientMoment returns one of the person\'s moments', pickAmbientMoment(withMemory, zero), { kind: 'memory', text: 'Same laugh' });
+    check('pickAmbientMoment on someone with nothing -> null', pickAmbientMoment(withNothing, zero), null);
+
+    const passCount = results.filter((r) => r.pass).length;
+    document.getElementById('output').innerHTML =
+      `<p>${passCount} / ${results.length} passed</p><ul>` +
+      results.map((r) => `<li class="${r.pass ? 'pass' : 'fail'}">${r.pass ? '✓' : '✗'} ${r.label}${r.pass ? '' : ` (expected ${JSON.stringify(r.expected)}, got ${JSON.stringify(r.actual)})`}</li>`).join('') +
+      '</ul>';
+  </script>
+</body>
+</html>

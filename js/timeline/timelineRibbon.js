@@ -379,6 +379,7 @@ function startStory() {
   if (!getReducedMotion()) requestYear(startYear); // gliding starts from the start year itself
   renderPlayButton();
   announce(`Playing the family story from ${startYear}.`, { delay: 300 });
+  emit('storyPlaybackChanged', { playing: true }); // lets other ambient features (e.g. ambientDiscovery.js) stand down while the story drives the sky
   story.frame = requestAnimationFrame(tickStory);
 }
 
@@ -413,6 +414,7 @@ function stopStory(reason) {
   story = null;
   captionEl.textContent = '';
   renderPlayButton();
+  emit('storyPlaybackChanged', { playing: false });
   if (reason === 'finished') announce(`The story reaches ${year}.`, { delay: 1000 });
   else if (reason === 'paused') announce(`Story paused at ${year}.`, { delay: 300 });
 }

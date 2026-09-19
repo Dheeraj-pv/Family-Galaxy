@@ -3,12 +3,13 @@
 // while the whole chain of people between them lights up on the map. The maths is in kinship.js;
 // this file is only the little form, the map highlight and the announcements.
 
-import { getPeople, getViewportTransform, setViewportTransform, getReducedMotion } from '../state.js';
+import { getPeople, getViewportTransform, setViewportTransform, getReducedMotion, getViewMode } from '../state.js';
 import { on } from '../utils/events.js';
 import { clamp, lerp } from '../utils/math.js';
 import { announce } from '../a11y/announcer.js';
 import { setPathHighlight, cancelFollow, render, ZOOM_MIN, easeOutCubic } from '../starmap/starMapRender.js';
 import { computeStarMapLayout, layoutBounds, fitViewForBounds } from '../starmap/orbitMath.js';
+import { computeFamilyMapLayout, familyMapBounds } from '../starmap/familyMapLayout.js';
 import { findRelationship } from './kinship.js';
 
 // The card covers the lower middle of the map, so when a path is shown the camera frames it in the
@@ -102,17 +103,23 @@ function canvasRect() {
   return document.getElementById('star-map-canvas').getBoundingClientRect();
 }
 
-// The whole tree fitted in the canvas — the same framing the map starts with.
+// The whole tree fitted in the canvas — the same framing the map starts with. Reads whichever
+// view (sky or family map) is currently showing, so returning to "fitted" always means the view
+// actually on screen, not always the lineage one.
 function fittedView() {
   const people = getPeople();
   if (people.length === 0) return null;
   const rect = canvasRect();
-  return fitViewForBounds(layoutBounds(people), { width: rect.width, height: rect.height }, { minScale: ZOOM_MIN });
+  const bounds = getViewMode() === 'map' ? familyMapBounds(people) : layoutBounds(people);
+  return fitViewForBounds(bounds, { width: rect.width, height: rect.height }, { minScale: ZOOM_MIN });
 }
 
 // Camera transform (scale + pan, see starMapRender) that puts every lit person in the sky above the card.
 function transformForPath(personIds) {
-  const { positions } = computeStarMapLayout(getPeople(), getReducedMotion() ? 0 : performance.now());
+  const people = getPeople();
+  const { positions } = getViewMode() === 'map'
+    ? computeFamilyMapLayout(people)
+    : computeStarMapLayout(people, getReducedMotion() ? 0 : performance.now());
   const boxes = personIds.map((id) => positions.get(id)).filter(Boolean);
   if (boxes.length === 0) return null;
   const minX = Math.min(...boxes.map((b) => b.x - b.size / 2));

@@ -6,10 +6,11 @@
 // enters/leaves it, arrow keys/Home/End move between stars — otherwise a keyboard user would have
 // to Tab through every relative just to reach the timeline.
 
-import { getPeople, setSelectedPersonId, getPlayheadYear } from '../state.js';
+import { getPeople, getEvents, setSelectedPersonId, getPlayheadYear, getViewMode } from '../state.js';
 import { computeStarMapLayout } from './orbitMath.js';
 import { on, emit } from '../utils/events.js';
 import { absenceReason } from '../timeline/timelineFilter.js';
+import { milestonesInYear } from '../timeline/milestones.js';
 import { setFocusedPersonId } from './starMapRender.js';
 
 let listEl = null;
@@ -24,6 +25,8 @@ export function initStarMapA11yMirror(containerEl) {
 
   on('dataReady', () => renderMirror());
   on('playheadChanged', () => updateAbsenceLabels());
+  ['eventAdded', 'eventEdited', 'eventDeleted'].forEach((name) => on(name, () => updateAbsenceLabels()));
+  on('viewModeChanged', () => updateAbsenceLabels());
 }
 
 function renderMirror() {
@@ -67,15 +70,28 @@ function onListKeydown(e) {
 }
 
 // When the timeline playhead moves, a star that has faded out of the sky says why: a screen
-// reader user scrubbing years hears "Mom, not yet born" instead of nothing changing.
+// reader user scrubbing years hears "Mom, not yet born" instead of nothing changing. Also names
+// any milestone constellation ring the star map is drawing that year (see timeline/milestones.js)
+// and, while the family map view is showing, each person's region — both otherwise purely visual.
 function updateAbsenceLabels() {
-  const byId = new Map(getPeople().map((p) => [p.id, p]));
+  const people = getPeople();
+  const byId = new Map(people.map((p) => [p.id, p]));
   const year = getPlayheadYear();
+  const mapMode = getViewMode() === 'map';
+  const milestonesByPerson = new Map();
+  milestonesInYear(people, getEvents(), year).forEach((m) => {
+    if (!m.personId) return;
+    milestonesByPerson.set(m.personId, [...(milestonesByPerson.get(m.personId) ?? []), m.detail]);
+  });
   mirrorItems.forEach(({ button, label, personIds }) => {
     const reasons = personIds.map((id) => absenceReason(byId.get(id), year));
     const allAbsent = reasons.every(Boolean);
     const suffix = !allAbsent ? '' : reasons.every((r) => r === 'unborn') ? ', not yet born' : reasons.every((r) => r === 'passed') ? ', no longer living' : ', not present in this year';
-    button.textContent = label + suffix;
+    const milestones = allAbsent ? [] : personIds.flatMap((id) => milestonesByPerson.get(id) ?? []);
+    const milestoneSuffix = milestones.length ? `, ${milestones.join(' & ')}` : '';
+    const regions = mapMode && !allAbsent ? [...new Set(personIds.map((id) => byId.get(id)?.region).filter(Boolean))] : [];
+    const regionSuffix = regions.length ? `, from ${regions.join(' & ')}` : '';
+    button.textContent = label + suffix + milestoneSuffix + regionSuffix;
   });
 }
 

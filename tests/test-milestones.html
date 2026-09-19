@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>test: milestones</title>
+  <style>
+    body { background: #0a0e27; color: #f8f5f0; font: 14px/1.5 monospace; padding: 24px; }
+    .pass { color: #5eead4; } .fail { color: #fb7185; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h1>milestones.js — pure milestone-constellation assertions</h1>
+  <div id="output">Running…</div>
+
+  <script type="module">
+    import { milestoneForPerson, milestoneForEvent, milestonesInYear, MILESTONE_AGE_STEP, MILESTONE_EVENT_STEP } from '../js/timeline/milestones.js';
+
+    const results = [];
+    const check = (label, actual, expected) => results.push({ label, actual, expected, pass: JSON.stringify(actual) === JSON.stringify(expected) });
+
+    check('milestone age step is 10', MILESTONE_AGE_STEP, 10);
+    check('milestone event step is 5', MILESTONE_EVENT_STEP, 5);
+
+    // --- person birthdays ---
+    const mom = { id: 'mom', birth: 1966, death: null };
+    check('turning 60 in 2026 is a milestone', milestoneForPerson(mom, 2026), { age: 60, label: '60th' });
+    check('turning 59 is not', milestoneForPerson(mom, 2025), null);
+    check('turning 0 (birth year itself) is not a milestone', milestoneForPerson(mom, 1966), null);
+    check('unknown birth -> null', milestoneForPerson({ id: 'x', birth: null }, 2026), null);
+
+    const gone = { id: 'g', birth: 1938, death: 2012 };
+    check('a milestone after death does not mark them', milestoneForPerson(gone, 2018), null); // would be 80
+    check('a milestone up to and including their death year still counts', milestoneForPerson(gone, 2008), { age: 70, label: '70th' });
+
+    check('ordinal: a 100th reads correctly (the "th" exception range only ever applies to multiples of 10, never 11/12/13)', milestoneForPerson({ birth: 1900 }, 2000).label, '100th');
+
+    // --- event anniversaries ---
+    const wedding = { year: 1962, personId: 'grandmother', label: 'Wedding' };
+    check('25th wedding anniversary', milestoneForEvent(wedding, 1987), { years: 25, label: '25th' });
+    check('24th (not a multiple of 5) is not a milestone', milestoneForEvent(wedding, 1986), null);
+    check('the event\'s own year is not its own anniversary', milestoneForEvent(wedding, 1962), null);
+    check('an event with no year -> null', milestoneForEvent({ label: 'Something' }, 2000), null);
+
+    // --- combined, per year ---
+    const people = [
+      { id: 'mom', birth: 1966, death: null },
+      { id: 'dad', birth: 1964, death: null },
+    ];
+    const events = [
+      { year: 1962, personId: 'grandmother', label: 'Wedding' },
+      { year: 1989, personId: 'mom', label: 'Married Dad' },
+    ];
+    const y2026 = milestonesInYear(people, events, 2026);
+    check('2026: mom turns 60, and the 1962 wedding turns 64 (not a milestone)', y2026, [
+      { personId: 'mom', kind: 'birthday', label: '60th', detail: '60th birthday' },
+    ]);
+    const y2014 = milestonesInYear(people, events, 2014);
+    check('2014: dad turns 50 AND the 1989 marriage turns 25', y2014.length, 2);
+    check('2014 items are well-formed', y2014.every((m) => m.label && m.detail), true);
+
+    check('no data -> empty, never throws', milestonesInYear([], [], 2026), []);
+
+    // --- an "X born" event doesn't double up with that same person's birthday milestone ---
+    const bornEvent = [
+      { id: 'x', birth: 1966 },
+    ];
+    const bornEvents = [{ year: 1966, personId: 'x', label: 'X born' }];
+    check('an "X born" event matching the birth year is not also an event milestone',
+      milestonesInYear(bornEvent, bornEvents, 2026), [{ personId: 'x', kind: 'birthday', label: '60th', detail: '60th birthday' }]);
+    check('a dated event that is NOT the birth record still counts', milestonesInYear(
+      [{ id: 'x', birth: 1966 }], [{ year: 1989, personId: 'x', label: 'Married' }], 2014,
+    ), [{ personId: 'x', kind: 'event', label: '25th', detail: '25th anniversary of Married' }]);
+
+    // --- against the real reference family ---
+    const raw = await fetch('../data/family.json', { cache: 'no-store' }).then((r) => r.json());
+    const real2026 = milestonesInYear(raw.people, raw.events, 2026);
+    check('real family 2026 milestones are well-formed', real2026.every((m) => typeof m.detail === 'string' && m.detail.length > 0), true);
+    // Grandfather b.1938, so 2026 - 1938 = 88, not a milestone; Mom b.1966 -> 60 IS.
+    check('real: Mom turns 60 in 2026', real2026.some((m) => m.personId === 'mom' && m.label === '60th'), true);
+
+    const passCount = results.filter((r) => r.pass).length;
+    document.getElementById('output').innerHTML =
+      `<p>${passCount} / ${results.length} passed</p><ul>` +
+      results.map((r) => `<li class="${r.pass ? 'pass' : 'fail'}">${r.pass ? '✓' : '✗'} ${r.label}${r.pass ? '' : ` (expected ${JSON.stringify(r.expected)}, got ${JSON.stringify(r.actual)})`}</li>`).join('') +
+      '</ul>';
+  </script>
+</body>
+</html>
