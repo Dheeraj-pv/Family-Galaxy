@@ -1,0 +1,94 @@
+/* Atmosphere behind the canvas: deep background starfield + nebula clouds, ported directly from
+   the design mockup's own CSS values (star_map_full_mockup). Static CSS rather than redrawn every
+   canvas frame — cheaper, and it's how the mockup itself built it. See CLAUDE.md "Tech notes". */
+#star-map-container::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  opacity: 0.85;
+  pointer-events: none;
+  background-repeat: repeat; /* tiles so the parallax drift never runs off the edge of the layer */
+  background-position: var(--starfield-x, 0px) var(--starfield-y, 0px);
+  background-image:
+    radial-gradient(1.5px 1.5px at 8% 12%, rgba(255, 255, 255, 0.8), transparent),
+    radial-gradient(1px 1px at 15% 35%, rgba(255, 255, 255, 0.6), transparent),
+    radial-gradient(2px 2px at 22% 8%, rgba(255, 255, 255, 0.9), transparent),
+    radial-gradient(1px 1px at 30% 55%, rgba(255, 255, 255, 0.5), transparent),
+    radial-gradient(1.5px 1.5px at 38% 20%, rgba(255, 255, 255, 0.7), transparent),
+    radial-gradient(1px 1px at 45% 68%, rgba(255, 255, 255, 0.55), transparent),
+    radial-gradient(2px 2px at 52% 15%, rgba(255, 255, 255, 0.85), transparent),
+    radial-gradient(1px 1px at 60% 45%, rgba(255, 255, 255, 0.5), transparent),
+    radial-gradient(1.5px 1.5px at 68% 78%, rgba(255, 255, 255, 0.65), transparent),
+    radial-gradient(1px 1px at 74% 25%, rgba(255, 255, 255, 0.6), transparent),
+    radial-gradient(2px 2px at 80% 62%, rgba(255, 255, 255, 0.8), transparent),
+    radial-gradient(1px 1px at 88% 40%, rgba(255, 255, 255, 0.5), transparent),
+    radial-gradient(1.5px 1.5px at 92% 85%, rgba(255, 255, 255, 0.7), transparent),
+    radial-gradient(1px 1px at 5% 82%, rgba(255, 255, 255, 0.5), transparent),
+    radial-gradient(1px 1px at 96% 12%, rgba(255, 255, 255, 0.6), transparent),
+    radial-gradient(1.5px 1.5px at 42% 90%, rgba(255, 255, 255, 0.6), transparent),
+    radial-gradient(1px 1px at 25% 92%, rgba(255, 255, 255, 0.55), transparent),
+    radial-gradient(1px 1px at 63% 6%, rgba(255, 255, 255, 0.6), transparent);
+}
+
+#star-map-container::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  mix-blend-mode: screen;
+  background:
+    radial-gradient(circle at -5% -8%, rgba(124, 111, 176, 0.16), transparent 45%),
+    radial-gradient(circle at 105% 108%, rgba(94, 234, 212, 0.13), transparent 45%),
+    radial-gradient(circle at 42% 118%, rgba(251, 113, 133, 0.1), transparent 45%);
+}
+
+#star-map-canvas {
+  /* Touch: one finger pans and two pinch-zoom the MAP, so the browser must not scroll/zoom the page
+     or pop text-selection / image callouts over it. */
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  position: relative;
+  z-index: 1; /* sits above the starfield/nebula layers so family stars read as the foreground */
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* Zoom +/- stack, bottom-right above the timeline ribbon. 44px touch targets. */
+.zoom-controls {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.zoom-controls__button {
+  width: 44px;
+  height: 44px;
+  border: 1px solid rgba(255, 216, 155, 0.3);
+  border-radius: 50%;
+  background: rgba(26, 31, 58, 0.85);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: var(--color-text-primary);
+  font-size: 1.4rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: box-shadow var(--duration-corkboard-hover) ease-out, border-color var(--duration-corkboard-hover) ease-out;
+}
+.zoom-controls__button:hover { border-color: rgba(255, 216, 155, 0.6); box-shadow: 0 0 16px rgba(255, 216, 155, 0.3); }
+.zoom-controls__button:focus-visible { outline: 2px solid var(--color-star-gold); outline-offset: 2px; }
+.zoom-controls__button[aria-disabled='true'] { opacity: 0.4; cursor: default; box-shadow: none; }
+
+/* On small screens the profile card rises from the bottom edge and would sit on top of the stack,
+   so the controls move to the top-right where nothing else lives. */
+@media (max-width: 480px), (max-height: 480px) {
+  .zoom-controls { top: 12px; bottom: auto; right: 12px; }
+}

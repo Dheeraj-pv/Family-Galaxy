@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>test: family stats</title>
+  <style>
+    body { background: #0a0e27; color: #f8f5f0; font: 14px/1.5 monospace; padding: 24px; }
+    .pass { color: #5eead4; } .fail { color: #fb7185; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h1>familyStats.js — pure stats assertions</h1>
+  <div id="output">Running…</div>
+
+  <script type="module">
+    import { familyStats, describeStats, ageInYear } from '../js/stats/familyStats.js';
+
+    const results = [];
+    const check = (label, actual, expected) => results.push({ label, actual, expected, pass: JSON.stringify(actual) === JSON.stringify(expected) });
+
+    // --- a small synthetic family: two founders (one gone by 2000), a child, a spouse, an unknown ---
+    const people = [
+      { id: 'a', name: 'Ada', birth: 1930, death: 2000, role: 'blood', generation: 0, postcards: [] },
+      { id: 'b', name: 'Bo', birth: 1932, death: null, role: 'blood', generation: 0, postcards: [{}, {}] },
+      { id: 'c', name: 'Cy', birth: 1960, death: null, role: 'blood', generation: 1, postcards: [] },
+      { id: 'd', name: 'Di', birth: 1962, death: null, role: 'spouse', generation: 1, postcards: [{}] },
+      { id: 'e', name: 'Eve', birth: null, death: null, role: 'blood', generation: 2, postcards: [] },
+      { id: 'f', name: 'Fay', birth: 1990, death: null, role: 'blood', generation: 2, postcards: [] },
+    ];
+    const events = [{ year: 1955 }, { year: 1990 }];
+    const s = familyStats(people, events, 1995, { currentYear: 2026 });
+
+    check('total people', s.total, 6);
+    check('present in 1995 (Eve unknown birth counts as present)', s.presentCount, 6);
+    check('roles split', [s.blood, s.marriedIn], [5, 1]);
+    check('generation rows',
+      s.generations.rows, [{ generation: 0, total: 2, present: 2 }, { generation: 1, total: 2, present: 2 }, { generation: 2, total: 2, present: 2 }]);
+    check('generations counted once each', s.generations.count, 3);
+    check('years spanned: earliest birth to today', s.span, { from: 1930, to: 2026, years: 96 });
+    check('eldest is the oldest known age in the sky', s.eldest, { name: 'Ada', age: 65 });
+    check('youngest is the youngest known age', s.youngest, { name: 'Fay', age: 5 });
+    check('average age ignores the unknown birth', s.averageAge, Math.round((65 + 63 + 35 + 33 + 5) / 5));
+    check('postcards total and top person', s.postcards, { total: 3, top: { name: 'Bo', count: 2, tied: false } });
+    check('moments total and range', s.moments, { total: 2, from: 1955, to: 1990 });
+
+    // --- absence: Ada gone by 2010, nobody born before 1930 ---
+    const later = familyStats(people, events, 2010);
+    check('a death takes someone out of the sky', later.presentCount, 5);
+    check('eldest moves on when the eldest passes', later.eldest.name, 'Bo');
+    const early = familyStats(people, events, 1931);
+    check('unborn people are not counted (unknown-birth Eve still is)', early.presentCount, 2);
+    check('youngest can be a newborn-age person (age 0 is valid)', familyStats([{ id: 'x', name: 'X', birth: 2000, role: 'blood', generation: 0, postcards: [] }, { id: 'y', name: 'Y', birth: 1970, role: 'blood', generation: 0, postcards: [] }], [], 2000).youngest, { name: 'X', age: 0 });
+
+    // --- never NaN ---
+    const unknown = familyStats([{ id: 'q', name: 'Q', birth: null, death: null, role: 'blood', generation: 0, postcards: [] }], [], 2000);
+    check('all-unknown births: no ages, no span', [unknown.averageAge, unknown.eldest, unknown.youngest, unknown.span], [null, null, null, null]);
+    check('all-unknown births: still counted in the sky', unknown.presentCount, 1);
+    const emptyStats = familyStats([], [], 2000);
+    check('empty family does not throw or NaN', [emptyStats.total, emptyStats.presentCount, emptyStats.generations.count, emptyStats.averageAge, emptyStats.postcards.total, emptyStats.moments], [0, 0, 0, null, 0, null]);
+    check('no NaN anywhere in the description of an empty family', describeStats(emptyStats).every((i) => !/NaN|undefined|null/.test(`${i.label}${i.value}${i.note}`)), true);
+    check('ageInYear: before birth -> null', ageInYear({ birth: 2000 }, 1999), null);
+    check('ageInYear: unknown birth -> null', ageInYear({ birth: null }, 1999), null);
+    check('ageInYear: birth year itself -> 0', ageInYear({ birth: 2000 }, 2000), 0);
+
+    // --- postcard ties ---
+    const tied = familyStats([
+      { id: 'a', name: 'A', birth: 1, role: 'blood', generation: 0, postcards: [{}] },
+      { id: 'b', name: 'B', birth: 1, role: 'blood', generation: 0, postcards: [{}] },
+    ], [], 2000);
+    check('tied postcard leaders are flagged, not silently picked', tied.postcards.top.tied, true);
+    check('no postcards -> no top person', familyStats(people.map((p) => ({ ...p, postcards: [] })), [], 1995).postcards.top, null);
+
+    // --- the words ---
+    const items = describeStats(s);
+    const byKey = Object.fromEntries(items.map((i) => [i.key, i]));
+    check('sky item value + label', [byKey.sky.value, byKey.sky.label], ['6', 'In the sky in 1995']);
+    check('sky note carries the average age', byKey.sky.note, `of 6 family members · average age ${s.averageAge}`);
+    check('generations item', [byKey.generations.value, byKey.generations.label], ['3', 'Generations']);
+    check('blood item', [byKey.blood.value, byKey.blood.note], ['5', '1 married in']);
+    check('span item', [byKey.span.value, byKey.span.note], ['96', '1930 – 2026']);
+    check('eldest note names them (the big numeral is the age)', byKey.eldest.note, 'years old \u00b7 Ada');
+    check('an age of 1 is singular', describeStats(familyStats([{ id: 'x', name: 'X', birth: 1999, role: 'blood', generation: 0, postcards: [] }, { id: 'y', name: 'Y', birth: 1950, role: 'blood', generation: 0, postcards: [] }], [], 2000)).find((i) => i.key === 'youngest').note, 'year old \u00b7 X');
+    check('postcard note names the leader', byKey.postcards.note, 'Bo has the most (2)');
+    check('moments item', [byKey.moments.value, byKey.moments.note], ['2', '1955 – 1990']);
+    check('between 6 and 9 stats on the card', items.length >= 6 && items.length <= 9, true);
+    check('a single generation is singular', describeStats(familyStats([{ id: 'x', name: 'X', birth: 1900, role: 'blood', generation: 0, postcards: [] }], [], 1950)).find((i) => i.key === 'generations').label, 'Generation');
+    check('a lone person is not their own "youngest"', describeStats(familyStats([{ id: 'x', name: 'X', birth: 1900, role: 'blood', generation: 0, postcards: [] }], [], 1950)).some((i) => i.key === 'youngest'), false);
+
+    // --- the real reference family (data/family.json, invented years) ---
+    const raw = await fetch('../data/family.json', { cache: 'no-store' }).then((r) => r.json());
+    const family = raw.people.map((p) => ({ ...p, postcards: p.postcards ?? [] }));
+    const now = familyStats(family, raw.events, 2026, { currentYear: 2026 });
+    check('real: 24 people', now.total, 24);
+    check('real: three have passed by 2026', now.presentCount, 21);
+    check('real: four generations', now.generations.count, 4);
+    check('real: 16 by blood, 8 married in', [now.blood, now.marriedIn], [16, 8]);
+    check('real: 88 years of family', now.span, { from: 1938, to: 2026, years: 88 });
+    check('real: eldest in 2026 is Uncle 1 (b.1963)', now.eldest, { name: 'Uncle 1', age: 63 });
+    check('real: youngest in 2026 is Neice 2 (b.2017)', now.youngest, { name: 'Neice 2', age: 9 });
+    check('real: the seeded postcard is Mom’s', now.postcards, { total: 1, top: { name: 'Mom', count: 1, tied: false } });
+    check('real: four moments 1962–1991', now.moments, { total: 4, from: 1962, to: 1991 });
+    const y1970 = familyStats(family, raw.events, 1970, { currentYear: 2026 });
+    check('real: nine people in the sky in 1970', y1970.presentCount, 9);
+    check('real: Grandfather is eldest in 1970 (32)', y1970.eldest, { name: 'Grandfather', age: 32 });
+    check('real: Uncle 2 is youngest in 1970 (1)', y1970.youngest, { name: 'Uncle 2', age: 1 });
+    check('real: every described number is finite text', describeStats(y1970).every((i) => /^\d+$/.test(i.value)), true);
+
+    const passCount = results.filter((r) => r.pass).length;
+    document.getElementById('output').innerHTML =
+      `<p>${passCount} / ${results.length} passed</p><ul>` +
+      results.map((r) => `<li class="${r.pass ? 'pass' : 'fail'}">${r.pass ? '✓' : '✗'} ${r.label}${r.pass ? '' : ` (expected ${JSON.stringify(r.expected)}, got ${JSON.stringify(r.actual)})`}</li>`).join('') +
+      '</ul>';
+  </script>
+</body>
+</html>

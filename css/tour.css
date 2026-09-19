@@ -1,0 +1,139 @@
+/* First-visit tour (js/tour/tour.js): a small coach-mark card and a soft gold glow around whatever
+   it is talking about. Non-modal: nothing behind is dimmed or made inert, and the ring never
+   takes pointer events. Sits above the header and profile card (which live inside #app-shell's
+   z-index 3 context) and below the modals (10). Design tokens only; no new colours or fonts. */
+
+.tour-ring {
+  position: fixed;
+  z-index: 8;
+  pointer-events: none;
+  border: 2px solid rgba(255, 216, 155, 0.9);
+  border-radius: 14px;
+  box-shadow: 0 0 0 4px rgba(255, 216, 155, 0.12), 0 0 24px rgba(255, 216, 155, 0.45);
+  opacity: 0;
+  transition:
+    opacity var(--duration-timeline-fade) ease,
+    left var(--duration-timeline-fade) ease,
+    top var(--duration-timeline-fade) ease,
+    width var(--duration-timeline-fade) ease,
+    height var(--duration-timeline-fade) ease,
+    border-radius var(--duration-timeline-fade) ease;
+  animation: tour-glow 3s ease-in-out infinite alternate; /* a slow breath, like a star's glow */
+}
+.tour-ring.is-open { opacity: 1; }
+
+@keyframes tour-glow {
+  from { box-shadow: 0 0 0 4px rgba(255, 216, 155, 0.08), 0 0 16px rgba(255, 216, 155, 0.3); }
+  to { box-shadow: 0 0 0 6px rgba(255, 216, 155, 0.16), 0 0 30px rgba(255, 216, 155, 0.55); }
+}
+
+.tour-card {
+  position: fixed;
+  z-index: 9;
+  width: min(320px, calc(100vw - 24px));
+  padding: 18px 20px 14px;
+  border-radius: 20px;
+  background: rgba(26, 31, 58, 0.96);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 216, 155, 0.3);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5), 0 0 32px rgba(255, 216, 155, 0.1);
+  color: var(--color-text-primary);
+  font-family: var(--font-body);
+  opacity: 0;
+  transition:
+    opacity var(--duration-timeline-fade) ease,
+    left var(--duration-timeline-fade) ease,
+    top var(--duration-timeline-fade) ease;
+}
+.tour-card.is-open { opacity: 1; }
+.tour-card:focus { outline: none; } /* focus lands here to be announced; its buttons carry the rings */
+.tour-card:focus-visible { outline: 2px solid var(--color-star-gold); outline-offset: 3px; }
+
+/* A modal is open (the app behind it is inert): tuck the guide away until it closes. */
+.tour-card.is-paused,
+.tour-ring.is-paused { visibility: hidden; }
+
+.tour-card__counter {
+  margin: 0 0 6px;
+  font-size: 0.6rem;
+  letter-spacing: 0.14em;
+  color: var(--color-text-secondary);
+}
+.tour-card__title {
+  margin: 0 0 8px;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 500;
+  font-size: 1.35rem;
+  line-height: 1.2;
+}
+.tour-card__body {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.55;
+}
+.tour-card__hand {
+  margin: 8px 0 0;
+  font-family: var(--font-hand);
+  font-weight: 600;
+  font-size: 1.15rem;
+  line-height: 1.2;
+  color: var(--color-star-gold);
+}
+.tour-card__hand[hidden] { display: none; }
+
+.tour-card__dots {
+  display: flex;
+  gap: 6px;
+  margin: 14px 0 12px;
+}
+.tour-card__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-star-gold);
+  opacity: 0.3;
+}
+.tour-card__dot.is-current { opacity: 1; box-shadow: 0 0 8px rgba(255, 216, 155, 0.7); }
+
+.tour-card__footer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.tour-card__skip,
+.tour-card__back {
+  min-height: 36px;
+  padding: 4px 6px;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.tour-card__skip { color: var(--color-text-secondary); text-decoration-color: rgba(248, 245, 240, 0.3); margin-right: auto; }
+.tour-card__back { color: var(--color-star-gold); text-decoration-color: rgba(255, 216, 155, 0.4); margin-left: auto; }
+.tour-card__skip[hidden] + .tour-card__back { margin-left: 0; }
+.tour-card__skip:hover { color: var(--color-text-primary); }
+.tour-card__back:hover { text-decoration-color: var(--color-star-gold); }
+.tour-card__skip:focus-visible,
+.tour-card__back:focus-visible { outline: 2px solid var(--color-text-primary); outline-offset: 3px; border-radius: 4px; }
+.tour-card__back[hidden],
+.tour-card__skip[hidden] { display: none; }
+.tour-card__next { flex: 0 0 auto; padding: 8px 20px; min-height: 36px; }
+/* The first step has no Back and the last has no Skip; either way Next stays on the right. */
+.tour-card__footer > .tour-card__next { margin-left: auto; }
+.tour-card__back:not([hidden]) ~ .tour-card__next { margin-left: 0; }
+
+@media (pointer: coarse) {
+  .tour-card__skip,
+  .tour-card__back,
+  .tour-card__next { min-height: 44px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tour-ring { animation: none; } /* no glow pulse; the ring simply sits there */
+}

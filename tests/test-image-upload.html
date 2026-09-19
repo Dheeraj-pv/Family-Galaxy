@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>test: image upload</title>
+  <style>
+    body { background: #0a0e27; color: #f8f5f0; font: 14px/1.5 monospace; padding: 24px; }
+    .pass { color: #5eead4; } .fail { color: #fb7185; font-weight: bold; }
+    #preview { display: flex; gap: 12px; margin-top: 16px; align-items: flex-end; }
+    #preview img { max-width: 200px; border: 1px solid #444; }
+  </style>
+</head>
+<body>
+  <h1>imageUpload.js — resize maths + validation</h1>
+  <div id="output">Running…</div>
+  <div id="preview"></div>
+
+  <script type="module">
+    import {
+      computeResizedDimensions, validateImageFile, resizeImageFile,
+      MAX_DIMENSION_PX, MAX_UPLOAD_BYTES, ALLOWED_TYPES,
+    } from '../js/utils/imageUpload.js';
+
+    const results = [];
+    const check = (label, actual, expected) => results.push({ label, actual, expected, pass: JSON.stringify(actual) === JSON.stringify(expected) });
+
+    // --- pure dimension maths ---
+    check('landscape photo scales down to the cap', computeResizedDimensions(4000, 3000, 1600), { width: 1600, height: 1200 });
+    check('portrait photo scales down to the cap', computeResizedDimensions(3000, 4000, 1600), { width: 1200, height: 1600 });
+    check('square photo scales down to the cap', computeResizedDimensions(2000, 2000, 1600), { width: 1600, height: 1600 });
+    check('a photo already under the cap is left alone', computeResizedDimensions(800, 600, 1600), { width: 800, height: 600 });
+    check('never upscales', computeResizedDimensions(100, 50, 1600), { width: 100, height: 50 });
+    check('exactly at the cap is left alone', computeResizedDimensions(1600, 900, 1600), { width: 1600, height: 900 });
+    check('zero-size input is handled', computeResizedDimensions(0, 0, 1600), { width: 0, height: 0 });
+    check('default cap is MAX_DIMENSION_PX', computeResizedDimensions(4000, 4000).width, MAX_DIMENSION_PX);
+
+    // --- validation ---
+    const jpeg = (size) => ({ type: 'image/jpeg', size });
+    check('no file at all is rejected', validateImageFile(null).ok, false);
+    check('a normal jpeg is accepted', validateImageFile(jpeg(2_000_000)).ok, true);
+    check('a file over the byte cap is rejected', validateImageFile(jpeg(MAX_UPLOAD_BYTES + 1)).ok, false);
+    check('a file exactly at the byte cap is accepted', validateImageFile(jpeg(MAX_UPLOAD_BYTES)).ok, true);
+    check('a non-image type is rejected', validateImageFile({ type: 'application/pdf', size: 1000 }).ok, false);
+    check('every advertised type is accepted', ALLOWED_TYPES.every((type) => validateImageFile({ type, size: 1000 }).ok), true);
+    check('rejection carries a human reason', typeof validateImageFile(null).reason, 'string');
+    check('a custom byte cap is honoured', validateImageFile(jpeg(500), { maxBytes: 100 }).ok, false);
+
+    // --- live resize (browser-only; draws a real canvas image and resizes it) ---
+    const canvas = document.createElement('canvas');
+    canvas.width = 3200; canvas.height = 1800;
+    const ctx = canvas.getContext('2d');
+    const gradient = ctx.createLinearGradient(0, 0, 3200, 1800);
+    gradient.addColorStop(0, '#ffd89b'); gradient.addColorStop(1, '#5eead4');
+    ctx.fillStyle = gradient; ctx.fillRect(0, 0, 3200, 1800);
+    const sourceBlob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+    const sourceFile = new File([sourceBlob], 'test.png', { type: 'image/png' });
+
+    try {
+      const { blob, width, height } = await resizeImageFile(sourceFile, { maxDimension: 400 });
+      check('resized to the requested cap on the long edge', Math.max(width, height), 400);
+      check('aspect ratio preserved (16:9 -> ~16:9)', Math.abs(width / height - 3200 / 1800) < 0.02, true);
+      check('produces a jpeg blob', blob.type, 'image/jpeg');
+      check('resized blob is smaller than the source', blob.size < sourceBlob.size, true);
+
+      const img = document.createElement('img');
+      img.src = URL.createObjectURL(blob);
+      img.alt = 'resized output';
+      const caption = document.createElement('figcaption');
+      caption.textContent = `${width}×${height}, ${(blob.size / 1024).toFixed(0)}KB`;
+      const fig = document.createElement('figure');
+      fig.append(img, caption);
+      document.getElementById('preview').appendChild(fig);
+    } catch (err) {
+      check('resizeImageFile ran without throwing', err.message, undefined);
+    }
+
+    const passCount = results.filter((r) => r.pass).length;
+    document.getElementById('output').innerHTML =
+      `<p>${passCount} / ${results.length} passed</p><ul>` +
+      results.map((r) => `<li class="${r.pass ? 'pass' : 'fail'}">${r.pass ? '✓' : '✗'} ${r.label}${r.pass ? '' : ` (expected ${JSON.stringify(r.expected)}, got ${JSON.stringify(r.actual)})`}</li>`).join('') +
+      '</ul>';
+  </script>
+</body>
+</html>

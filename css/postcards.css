@@ -1,0 +1,289 @@
+/* Postcards: the corkboard grid, the flip, and the "Send a postcard" modal.
+   Paper is Aged Cream; ink is Deep Space Navy (AA contrast on cream). Flip timing/hover values
+   come straight from the tokens (600ms ease-in-out, 200ms ease-out, 1.03 scale). */
+
+.corkboard {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 16px 14px;
+  padding: 4px 2px;
+}
+
+.postcard-slot {
+  transform: rotate(var(--tilt, 0deg));
+  transition: transform var(--duration-corkboard-hover) ease-out;
+}
+.postcard-slot:hover,
+.postcard-slot:focus-within {
+  transform: rotate(var(--tilt, 0deg)) scale(var(--scale-corkboard-hover));
+}
+
+.postcard {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--color-navy-deep);
+  text-align: left;
+  cursor: pointer;
+  perspective: 900px;
+}
+.postcard:focus-visible {
+  outline: 2px solid var(--color-star-gold);
+  outline-offset: 4px;
+  border-radius: 4px;
+}
+
+.postcard__inner {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  transition: transform var(--duration-postcard-flip) ease-in-out;
+}
+.postcard.is-flipped .postcard__inner { transform: rotateY(180deg); }
+
+.postcard__face {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 8px;
+  border-radius: 4px;
+  background: var(--color-paper);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  overflow: hidden;
+}
+.postcard__face--back {
+  transform: rotateY(180deg);
+  justify-content: space-between;
+  padding: 10px 12px;
+  /* faint ruled lines, like the back of a real card */
+  background-image: repeating-linear-gradient(transparent 0 21px, rgba(10, 14, 39, 0.1) 21px 22px);
+}
+
+/* Shadow deepens at the midpoint of the turn, then settles. */
+.postcard.is-flipping .postcard__face { animation: postcard-shadow var(--duration-postcard-flip) ease-in-out; }
+@keyframes postcard-shadow {
+  0%, 100% { box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35); }
+  50% { box-shadow: 0 16px 32px rgba(0, 0, 0, 0.6); }
+}
+
+.postcard__photo {
+  flex: 1;
+  min-height: 0;
+  border-radius: 2px;
+  overflow: hidden;
+}
+.postcard__photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.postcard__photo.is-placeholder {
+  background: radial-gradient(circle at 30% 30%, rgba(255, 216, 155, 0.7), rgba(94, 234, 212, 0.25));
+}
+
+.postcard__from { margin-top: 4px; font-size: 1.05rem; font-weight: 600; line-height: 1.1; }
+.postcard__date { font-size: 0.65rem; letter-spacing: 0.14em; opacity: 0.85; } /* 11:1 on paper; was 0.55rem/.7 */
+
+.postcard__note {
+  font-size: 1.1rem;
+  font-weight: 600;
+  line-height: 22px;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+}
+.postcard__signoff { align-self: flex-end; font-size: 1rem; font-weight: 600; }
+
+.corkboard__add {
+  display: block;
+  margin: 16px auto 0;
+  padding: 8px 14px;
+  border: 1px solid rgba(255, 216, 155, 0.35);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-star-gold);
+  font-size: 0.7rem;
+  cursor: pointer;
+  transition: background-color var(--duration-corkboard-hover) ease-out;
+}
+.corkboard__add:hover { background: rgba(255, 216, 155, 0.1); }
+.corkboard__add:focus-visible { outline: 2px solid var(--color-star-gold); outline-offset: 2px; }
+
+/* Edit / Delete under a user-added postcard. Delete is rose (the "careful" accent token); its
+   inline confirmation replaces the row in place. Reduced motion needs nothing: there is no animation. */
+.postcard-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.postcard-actions__question { width: 100%; text-align: center; font-size: 0.8rem; color: var(--color-text-secondary); }
+.postcard-action {
+  padding: 6px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 0.6rem;
+  cursor: pointer;
+  transition: background-color var(--duration-corkboard-hover) ease-out, color var(--duration-corkboard-hover) ease-out;
+}
+.postcard-action:hover { background: rgba(255, 255, 255, 0.08); color: var(--color-text-primary); }
+.postcard-action--delete { color: var(--color-shared); border-color: rgba(251, 113, 133, 0.5); }
+.postcard-action--delete:hover { background: rgba(251, 113, 133, 0.12); color: var(--color-shared); }
+.postcard-action:focus-visible { outline: 2px solid var(--color-star-gold); outline-offset: 2px; }
+@media (pointer: coarse) { .postcard-action { min-height: 44px; min-width: 44px; } }
+
+/* Header call-to-action (soft gold gradient, per the design tokens). */
+.cta-button {
+  padding: 10px 18px;
+  border: none;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--color-star-gold), var(--color-paternal));
+  color: var(--color-navy-deep);
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+  box-shadow: 0 0 20px rgba(255, 216, 155, 0.3);
+  transition: box-shadow var(--duration-corkboard-hover) ease-out;
+}
+.cta-button:hover { box-shadow: 0 0 28px rgba(255, 216, 155, 0.55); }
+.cta-button:focus-visible { outline: 2px solid var(--color-text-primary); outline-offset: 3px; }
+
+/* "Send a postcard" modal */
+.add-postcard {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  opacity: 0;
+  transition: opacity var(--duration-card-entrance) ease-out;
+}
+.add-postcard.is-open { opacity: 1; }
+.add-postcard__backdrop { position: absolute; inset: 0; background: rgba(10, 14, 39, 0.82); }
+.add-postcard__panel {
+  position: relative;
+  width: min(440px, 100%);
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  padding: 24px;
+  border-radius: 20px;
+  background: rgba(26, 31, 58, 0.97);
+  border: 1px solid rgba(255, 216, 155, 0.25);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.55), 0 0 40px rgba(255, 216, 155, 0.08);
+  transform: scale(0.96);
+  transition: transform var(--duration-card-entrance) var(--ease-overshoot);
+}
+.add-postcard.is-open .add-postcard__panel { transform: scale(1); }
+.add-postcard__panel h2 { font-size: 1.5rem; margin-bottom: 16px; }
+
+.add-postcard__close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.add-postcard__close:hover { color: var(--color-text-primary); background: rgba(255, 255, 255, 0.08); }
+
+.add-postcard__field { margin-bottom: 14px; }
+.add-postcard__field label { display: block; margin-bottom: 6px; font-size: 0.65rem; color: var(--color-text-secondary); }
+.add-postcard__field input,
+.add-postcard__field select,
+.add-postcard__field textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.5); /* 4.7:1 vs the panel; the old .18 failed WCAG 1.4.11 (3:1) */
+  border-radius: 10px;
+  background: rgba(10, 14, 39, 0.6);
+  color: var(--color-text-primary);
+  font-size: 0.95rem;
+  color-scheme: dark;
+}
+.add-postcard__field textarea { font-size: 1.3rem; font-weight: 600; resize: vertical; }
+.add-postcard__field [aria-invalid='true'] { border-color: var(--color-shared); }
+.add-postcard__error { min-height: 1em; margin-top: 4px; font-size: 0.8rem; color: var(--color-shared); }
+
+/* Photo field: a small square preview above the file input, "Remove photo" as a quiet text link. */
+.add-postcard__photo-preview {
+  display: block;
+  width: 72px;
+  height: 72px;
+  margin-bottom: 8px;
+  border-radius: 10px;
+  object-fit: cover;
+  background: rgba(255, 255, 255, 0.06);
+}
+.add-postcard__field--photo input[type='file'] {
+  width: 100%;
+  padding: 8px 0;
+  border: none;
+  background: none;
+  color: var(--color-text-secondary);
+  font-size: 0.85rem;
+}
+.add-postcard__photo-remove {
+  display: block;
+  margin-top: 6px;
+  padding: 2px 0;
+  border: none;
+  background: none;
+  color: var(--color-star-gold);
+  font-size: 0.75rem;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.add-postcard__close:focus-visible,
+.add-postcard__field input:focus-visible,
+.add-postcard__field select:focus-visible,
+.add-postcard__field textarea:focus-visible,
+.add-postcard__photo-remove:focus-visible,
+.add-postcard__submit:focus-visible { outline: 2px solid var(--color-star-gold); outline-offset: 2px; }
+
+.add-postcard__submit:disabled { opacity: 0.7; cursor: default; }
+
+.add-postcard__submit {
+  width: 100%;
+  padding: 12px;
+  border: none;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--color-star-gold), var(--color-paternal));
+  color: var(--color-navy-deep);
+  font-weight: 600;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* No 3D turn: the two faces cross-fade in place over the reduced-motion duration. */
+  .postcard__inner,
+  .postcard.is-flipped .postcard__inner { transform: none; transition: none; }
+  .postcard__face { transition: opacity var(--duration-reduced-motion-fade) linear; }
+  .postcard__face--back { transform: none; opacity: 0; }
+  .postcard.is-flipped .postcard__face--front { opacity: 0; }
+  .postcard.is-flipped .postcard__face--back { opacity: 1; }
+  .postcard.is-flipping .postcard__face { animation: none; }
+  .postcard-slot,
+  .postcard-slot:hover,
+  .postcard-slot:focus-within { transition: none; }
+  .add-postcard__panel,
+  .add-postcard.is-open .add-postcard__panel { transform: none; }
+}

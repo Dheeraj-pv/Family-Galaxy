@@ -1,0 +1,53 @@
+/* Three stacked zones: header, star map (flex-grow), timeline ribbon.
+   Header/timeline are structural placeholders until their own build-order steps land — see
+   CLAUDE.md "Module architecture & build order". */
+
+#app-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh; /* tracks mobile browser toolbars; the 100vh above is the fallback */
+  position: relative;
+  z-index: 3; /* above body::before (grain) and body::after (vignette) */
+}
+
+#app-header {
+  height: var(--header-height);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 16px;
+  padding: 0 24px;
+}
+
+#star-map-container {
+  flex-grow: 1;
+  position: relative;
+  overflow: hidden;
+}
+
+/* env() insets are 0 unless the page opts in with viewport-fit=cover; when it does, the ribbon grows
+   by the home-indicator height instead of being squeezed, and clears a landscape notch. */
+#timeline-container {
+  height: calc(var(--timeline-height) + env(safe-area-inset-bottom, 0px));
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+  flex-shrink: 0;
+}
+
+@media (max-width: 480px) {
+  #timeline-container {
+    height: calc(var(--timeline-height-mobile) + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/* Short landscape phones (e.g. 640x360): the desktop header + 120px ribbon would leave the map
+   under 180px tall, so both shrink and the ribbon takes its compact 60px form. */
+@media (max-height: 480px) {
+  :root {
+    --header-height: 52px;
+    --timeline-height: var(--timeline-height-mobile);
+  }
+}

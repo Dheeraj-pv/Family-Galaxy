@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>test: cloud model</title>
+  <style>
+    body { background: #0a0e27; color: #f8f5f0; font: 14px/1.5 monospace; padding: 24px; }
+    .pass { color: #5eead4; } .fail { color: #fb7185; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h1>cloudModel.js — row ↔ app shape translation</h1>
+  <div id="output">Running…</div>
+
+  <script type="module">
+    import { rowToPostcard, postcardToRow, rowToEvent, eventToRow, rowToPersonPhoto } from '../js/data/cloudModel.js';
+
+    const results = [];
+    const check = (label, actual, expected) => results.push({ label, actual, expected, pass: JSON.stringify(actual) === JSON.stringify(expected) });
+
+    // --- postcards ---
+    const pcRow = { id: 'pc_1', person_id: 'mom', sender: 'Dad', date: '2023-07-14', photo: 'https://x.supabase.co/storage/v1/object/public/postcards/pc_1.jpg', note: 'hi', created_at: '2024-01-01T00:00:00Z' };
+    check('row -> postcard keeps every field', rowToPostcard(pcRow), { id: 'pc_1', personId: 'mom', from: 'Dad', date: '2023-07-14', photo: pcRow.photo, note: 'hi' });
+    check('a null date/photo row survives', rowToPostcard({ id: 'pc_2', person_id: 'mom', sender: 'Dad', date: null, photo: null, note: 'hi' }), { id: 'pc_2', personId: 'mom', from: 'Dad', date: null, photo: null, note: 'hi' });
+    check('a missing (undefined) date/photo column also becomes null', rowToPostcard({ id: 'pc_3', person_id: 'mom', sender: 'Dad', note: 'hi' }).photo, null);
+
+    const postcard = { id: 'pc_9', from: 'Sam', date: '2024-01-02', photo: null, note: 'Happy new year' };
+    check('postcard -> row attaches the given personId', postcardToRow('mom', postcard), { id: 'pc_9', person_id: 'mom', sender: 'Sam', date: '2024-01-02', photo: null, note: 'Happy new year' });
+    check('round-trips row -> postcard -> row unchanged', postcardToRow('mom', rowToPostcard(pcRow)), { id: 'pc_1', person_id: 'mom', sender: 'Dad', date: '2023-07-14', photo: pcRow.photo, note: 'hi' });
+
+    // --- events ---
+    const evRow = { id: 'ev_1', year: 1998, month: 6, day: 14, person_id: 'mom', label: 'Moved house', color: 'maternal', created_at: '2024-01-01T00:00:00Z' };
+    check('row -> event keeps every field', rowToEvent(evRow), { id: 'ev_1', year: 1998, month: 6, day: 14, personId: 'mom', label: 'Moved house', color: 'maternal' });
+    check('a year-only event (no month/day/person) survives', rowToEvent({ id: 'ev_2', year: 2000, month: null, day: null, person_id: null, label: 'Whole family trip', color: 'shared' }), { id: 'ev_2', year: 2000, month: null, day: null, personId: null, label: 'Whole family trip', color: 'shared' });
+
+    const event = { id: 'ev_9', year: 2010, month: null, day: null, personId: null, label: 'Trip', color: 'shared' };
+    check('event -> row uses person_id, nulls for missing month/day', eventToRow(event), { id: 'ev_9', year: 2010, month: null, day: null, person_id: null, label: 'Trip', color: 'shared' });
+    check('round-trips event -> row -> event unchanged', rowToEvent(eventToRow(event)), event);
+
+    // --- person photos ---
+    check('row -> personPhoto', rowToPersonPhoto({ person_id: 'mom', then_photo: 'https://x/then.jpg', now_photo: null }), { personId: 'mom', then: 'https://x/then.jpg', now: null });
+    check('both photos null', rowToPersonPhoto({ person_id: 'dad', then_photo: null, now_photo: null }), { personId: 'dad', then: null, now: null });
+
+    const passCount = results.filter((r) => r.pass).length;
+    document.getElementById('output').innerHTML =
+      `<p>${passCount} / ${results.length} passed</p><ul>` +
+      results.map((r) => `<li class="${r.pass ? 'pass' : 'fail'}">${r.pass ? '✓' : '✗'} ${r.label}${r.pass ? '' : ` (expected ${JSON.stringify(r.expected)}, got ${JSON.stringify(r.actual)})`}</li>`).join('') +
+      '</ul>';
+  </script>
+</body>
+</html>

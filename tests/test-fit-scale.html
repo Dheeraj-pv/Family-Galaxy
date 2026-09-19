@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>test: fit-to-viewport</title>
+  <style>
+    body { background: #0a0e27; color: #f8f5f0; font: 14px/1.5 monospace; padding: 24px; }
+    .pass { color: #5eead4; } .fail { color: #fb7185; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h1>orbitMath.js — layoutReach / layoutBounds / fitViewForBounds</h1>
+  <div id="output">Running…</div>
+  <script type="module">
+    import { normalizePerson } from '../js/data/schema.js';
+    import {
+      computeStarMapLayout, layoutReach, layoutBounds, fitViewForBounds,
+      lineageOrbitRadius, bloodStarSize, FOUNDER_GROUP_SPACING, SIZE_SCALE,
+    } from '../js/starmap/orbitMath.js';
+
+    const results = [];
+    const near = (label, actual, expected, tol = 0.01) => results.push({ label, actual, expected, pass: Math.abs(actual - expected) <= tol });
+    const check = (label, actual, expected) => results.push({ label, actual, expected, pass: actual === expected });
+
+    const raw = await fetch('../data/family.json', { cache: 'no-store' }).then((r) => r.json());
+    const people = raw.people.map(normalizePerson);
+
+    // --- reach: derived from the generation tables, not a magic number ---
+    const chain3 = lineageOrbitRadius(0) + lineageOrbitRadius(1) + lineageOrbitRadius(2); // already scaled
+    near('worst-case chain is 380 * SIZE_SCALE', chain3, 380 * SIZE_SCALE);
+    const reach = layoutReach(people);
+    near('reach = gen3 chain + its glow + 30px margin', reach, chain3 + (bloodStarSize(3) / 2) * 1.6 + 30);
+
+    // --- reach really bounds the layout at every moment (rotation-invariant) ---
+    const HOUR = 3600 * 1000;
+    let worst = 0;
+    for (const t of [0, 1234, 60000, HOUR, 7 * HOUR, 40 * HOUR, 1000 * HOUR]) {
+      const { positions } = computeStarMapLayout(people, t);
+      positions.forEach((pos) => { worst = Math.max(worst, Math.hypot(pos.x, pos.y) + pos.size / 2); });
+    }
+    check('no body ever swings past the reach (7 sampled times, incl. long-run drift)', worst <= reach, true);
+
+    // --- bounds ---
+    const b = layoutBounds(people);
+    near('bounds are symmetric about the single founder anchor (x)', (b.minX + b.maxX) / 2, 0);
+    near('bounds are square', b.maxX - b.minX, b.maxY - b.minY);
+    near('bounds width = 2 * reach', b.maxX - b.minX, 2 * reach);
+    check('no people -> null bounds', layoutBounds([]), null);
+
+    const twoTrees = [
+      { id: 'a1', role: 'blood', isFounder: true, partnerOf: 'a2', parents: [], generation: 0 },
+      { id: 'a2', role: 'blood', isFounder: true, partnerOf: 'a1', parents: [], generation: 0 },
+      { id: 'b1', role: 'blood', isFounder: true, partnerOf: 'b2', parents: [], generation: 0 },
+      { id: 'b2', role: 'blood', isFounder: true, partnerOf: 'b1', parents: [], generation: 0 },
+    ];
+    const tb = layoutBounds(twoTrees);
+    near('two founder groups: width = spacing + 2*reach', tb.maxX - tb.minX, FOUNDER_GROUP_SPACING + 2 * layoutReach(twoTrees));
+
+    // --- fit ---
+    const box = { minX: -300, maxX: 300, minY: -300, maxY: 300 };
+    near('360x640 canvas, 16px pad: width-limited scale', fitViewForBounds(box, { width: 360, height: 640 }).scale, (360 - 32) / 600);
+    near('short landscape 640x248: height-limited scale', fitViewForBounds(box, { width: 640, height: 248 }).scale, (248 - 32) / 600);
+    near('big screen never zooms in past 1', fitViewForBounds(box, { width: 3000, height: 2000 }).scale, 1);
+    near('honours minScale on a tiny canvas', fitViewForBounds(box, { width: 100, height: 100 }, { minScale: 0.3 }).scale, 0.3);
+    const off = fitViewForBounds({ minX: 0, maxX: 400, minY: 0, maxY: 200 }, { width: 800, height: 600 }, { maxScale: 5 });
+    near('off-centre bounds are panned to the canvas centre (x)', off.x, -200 * off.scale);
+    near('off-centre bounds are panned to the canvas centre (y)', off.y, -100 * off.scale);
+    check('null bounds -> identity camera', JSON.stringify(fitViewForBounds(null, { width: 500, height: 500 })), JSON.stringify({ scale: 1, x: 0, y: 0 }));
+    check('zero-size canvas -> identity camera', JSON.stringify(fitViewForBounds(box, { width: 0, height: 0 })), JSON.stringify({ scale: 1, x: 0, y: 0 }));
+
+    // property: for realistic screens the fitted map (incl. padding) is fully on screen
+    const sizes = [[360, 500], [390, 640], [768, 800], [640, 248], [1456, 660], [1920, 900]];
+    const allFit = sizes.every(([w, h]) => {
+      const v = fitViewForBounds(b, { width: w, height: h }, { minScale: 0.3 });
+      const left = w / 2 + v.x + b.minX * v.scale, right = w / 2 + v.x + b.maxX * v.scale;
+      const top = h / 2 + v.y + b.minY * v.scale, bottom = h / 2 + v.y + b.maxY * v.scale;
+      return left >= 16 - 0.01 && right <= w - 16 + 0.01 && top >= 16 - 0.01 && bottom <= h - 16 + 0.01;
+    });
+    check('real family tree fits inside the padded canvas at 360/390/768/landscape/desktop/1080p sizes', allFit, true);
+
+    const passCount = results.filter((r) => r.pass).length;
+    document.getElementById('output').innerHTML =
+      `<p>${passCount} / ${results.length} passed</p><ul>` +
+      results.map((r) => `<li class="${r.pass ? 'pass' : 'fail'}">${r.pass ? '✓' : '✗'} ${r.label}${r.pass ? '' : ` (expected ${JSON.stringify(r.expected)}, got ${JSON.stringify(r.actual)})`}</li>`).join('') + '</ul>';
+  </script>
+</body>
+</html>

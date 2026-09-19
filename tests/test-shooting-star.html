@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>test: shooting star</title>
+  <style>
+    body { background: #0a0e27; color: #f8f5f0; font: 14px/1.5 monospace; padding: 24px; }
+    .pass { color: #5eead4; } .fail { color: #fb7185; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h1>shootingStar.js — timing, path and state assertions</h1>
+  <div id="output">Running…</div>
+
+  <script type="module">
+    import {
+      SHOOTING_STAR_DELAY_MS as DELAY, SHOOTING_STAR_DURATION_MS as FLIGHT, SHOOTING_STAR_BLOOM_MS as BLOOM,
+      SHOOTING_STAR_TOTAL_MS, SHOOTING_STAR_MAX_CONCURRENT as MAX,
+      shootingStarPhase, shootingStarProgress, bloomProgress, shootingStarStart, shootingStarPoint,
+      shootingStarTrail, bloomShape, envelopeCenter, easeInOutCubic,
+      launchShootingStar, activeShootingStarCount, resetShootingStars, drawShootingStars,
+    } from '../js/starmap/shootingStar.js';
+
+    const results = [];
+    const near = (a, b, tol = 1e-6) => Math.abs(a - b) <= tol;
+    const check = (label, actual, expected) => results.push({ label, actual, expected, pass: JSON.stringify(actual) === JSON.stringify(expected) });
+    const ok = (label, condition) => results.push({ label, actual: !!condition, expected: true, pass: !!condition });
+
+    // --- timing ---
+    ok('flight is 1.4-1.8s', FLIGHT >= 1400 && FLIGHT <= 1800);
+    check('total = delay + flight + bloom', SHOOTING_STAR_TOTAL_MS, DELAY + FLIGHT + BLOOM);
+    check('waits during the delay', shootingStarPhase(DELAY - 1), 'waiting');
+    check('flies right after the delay', shootingStarPhase(DELAY), 'flying');
+    check('still flying just before landing', shootingStarPhase(DELAY + FLIGHT - 1), 'flying');
+    check('blooms on landing', shootingStarPhase(DELAY + FLIGHT), 'blooming');
+    check('done after the bloom', shootingStarPhase(SHOOTING_STAR_TOTAL_MS), 'done');
+
+    // --- easing / progress ---
+    check('easeInOutCubic endpoints', [easeInOutCubic(0), easeInOutCubic(1)], [0, 1]);
+    ok('easeInOutCubic(0.5) = 0.5', near(easeInOutCubic(0.5), 0.5));
+    ok('ease-in-out: slow start, slow finish', easeInOutCubic(0.1) < 0.1 && easeInOutCubic(0.9) > 0.9);
+    check('progress is 0 while waiting', shootingStarProgress(0), 0);
+    check('progress is 0 at the end of the delay', shootingStarProgress(DELAY), 0);
+    check('progress is 1 at landing', shootingStarProgress(DELAY + FLIGHT), 1);
+    check('progress stays 1 afterwards', shootingStarProgress(DELAY + FLIGHT + 5000), 1);
+    ok('progress is midway at the flight midpoint', near(shootingStarProgress(DELAY + FLIGHT / 2), 0.5));
+    ok('progress never goes backwards', (() => {
+      let last = -1;
+      for (let t = 0; t <= SHOOTING_STAR_TOTAL_MS; t += 23) { const p = shootingStarProgress(t); if (p < last) return false; last = p; }
+      return true;
+    })());
+    check('bloom is 0 before landing', bloomProgress(DELAY + FLIGHT - 1), 0);
+    ok('bloom is 1 by the end', bloomProgress(SHOOTING_STAR_TOTAL_MS) === 1);
+    const first = bloomShape(0); const last = bloomShape(1);
+    ok('bloom starts bright and small', first.alpha > 0.5 && first.radiusPx < 10);
+    ok('bloom ends invisible and wide', near(last.alpha, 0) && last.radiusPx > 30);
+
+    // --- start point: off toward the top, a fixed SCREEN distance regardless of zoom ---
+    const target = { x: 100, y: 200 };
+    const s1 = shootingStarStart(target, 1, 0);
+    const s2 = shootingStarStart(target, 2, 0);
+    ok('starts above the target', s1.y < target.y);
+    ok('side 0 comes from the right, side 1 from the left',
+      shootingStarStart(target, 1, 0).x > target.x && shootingStarStart(target, 1, 1).x < target.x);
+    ok('screen distance is constant: 2x zoom halves the layout distance',
+      near(Math.hypot(s1.x - target.x, s1.y - target.y), 2 * Math.hypot(s2.x - target.x, s2.y - target.y), 1e-6));
+    ok('tiny scales do not explode', Number.isFinite(shootingStarStart(target, 0, 0).x));
+
+    // --- path ---
+    const A = { x: 0, y: 0 }; const B = { x: 300, y: -200 };
+    ok('path starts at the start', near(shootingStarPoint(A, B, 0).x, 0) && near(shootingStarPoint(A, B, 0).y, 0));
+    ok('path ends exactly on the end', near(shootingStarPoint(A, B, 1).x, 300) && near(shootingStarPoint(A, B, 1).y, -200));
+    const mid = shootingStarPoint(A, B, 0.5, 1);
+    const midOpp = shootingStarPoint(A, B, 0.5, -1);
+    ok('path bows sideways (midpoint is off the straight line)', Math.hypot(mid.x - 150, mid.y + 100) > 5);
+    ok('bow flips the side it curves toward', near(mid.x + midOpp.x, 300, 1e-6) && near(mid.y + midOpp.y, -200, 1e-6));
+    ok('bow is gentle (under 15% of the path length)', Math.hypot(mid.x - 150, mid.y + 100) < 0.15 * Math.hypot(300, 200));
+
+    // --- trail ---
+    const trail = shootingStarTrail(A, B, 0.6, 1);
+    ok('trail has the head first', near(trail[0].x, shootingStarPoint(A, B, 0.6, 1).x));
+    ok('trail points get progressively farther from the head', trail.every((p, i) => i === 0 || Math.hypot(p.x - trail[0].x, p.y - trail[0].y) >= Math.hypot(trail[i - 1].x - trail[0].x, trail[i - 1].y - trail[0].y) - 1e-9));
+    const early = shootingStarTrail(A, B, 0, 1);
+    ok('at progress 0 the whole trail sits on the start (no trail before launch)', early.every((p) => near(p.x, 0) && near(p.y, 0)));
+    check('trail length is configurable', shootingStarTrail(A, B, 0.5, 1, 6).length, 6);
+
+    // --- envelope placement ---
+    const pos = { x: 50, y: 60, size: 30 };
+    const env = envelopeCenter(pos, 'mom', 0);
+    ok('envelope sits beside the star, not on it', Math.hypot(env.x - pos.x, env.y - pos.y) > 15);
+    ok('envelope placement is stable per person', JSON.stringify(envelopeCenter(pos, 'mom', 0)) === JSON.stringify(envelopeCenter(pos, 'mom', 0)));
+    ok('different people get different spots', JSON.stringify(envelopeCenter(pos, 'mom', 0)) !== JSON.stringify(envelopeCenter(pos, 'dad', 0)));
+
+    // --- state + drawing (a recording fake canvas context) ---
+    function fakeCtx() {
+      const calls = [];
+      const grad = { addColorStop() {} };
+      return new Proxy({ calls }, {
+        get(target, prop) {
+          if (prop === 'calls') return calls;
+          if (prop === 'createRadialGradient') return () => grad;
+          return (...args) => { calls.push(prop); };
+        },
+        set() { return true; },
+      });
+    }
+    const positions = new Map([['mom', { x: 0, y: 0, size: 30 }], ['dad', { x: 90, y: 40, size: 20 }]]);
+
+    resetShootingStars();
+    let ctx = fakeCtx();
+    drawShootingStars(ctx, positions, 1000, false, 1);
+    check('nothing flying: draws nothing, touches nothing', ctx.calls.length, 0);
+
+    launchShootingStar('mom', 1000);
+    check('launch registers one streak', activeShootingStarCount(), 1);
+    ctx = fakeCtx();
+    drawShootingStars(ctx, positions, 1000 + DELAY - 10, false, 1);
+    check('waiting streak draws nothing yet', ctx.calls.length, 0);
+    check('...but is kept', activeShootingStarCount(), 1);
+    ctx = fakeCtx();
+    drawShootingStars(ctx, positions, 1000 + DELAY + FLIGHT / 2, false, 1);
+    ok('flying streak paints (trail strokes + head fill)', ctx.calls.includes('stroke') && ctx.calls.includes('fill'));
+    ctx = fakeCtx();
+    drawShootingStars(ctx, positions, 1000 + DELAY + FLIGHT + 100, false, 1);
+    ok('blooming streak paints a fill and no trail stroke', ctx.calls.includes('fill') && !ctx.calls.includes('stroke'));
+    ctx = fakeCtx();
+    drawShootingStars(ctx, positions, 1000 + SHOOTING_STAR_TOTAL_MS + 1, false, 1);
+    check('finished streak is removed', activeShootingStarCount(), 0);
+
+    resetShootingStars();
+    launchShootingStar('ghost', 0);
+    drawShootingStars(fakeCtx(), positions, DELAY + 100, false, 1);
+    check('a recipient not on the map is dropped, never drawn', activeShootingStarCount(), 0);
+
+    resetShootingStars();
+    for (let i = 0; i < MAX + 3; i += 1) launchShootingStar('mom', i);
+    check(`concurrent streaks are capped at ${MAX}`, activeShootingStarCount(), MAX);
+    ok('the OLDEST are dropped (a fresh one survives to bloom)', (() => {
+      resetShootingStars();
+      launchShootingStar('dad', 0); // oldest
+      for (let i = 1; i <= MAX; i += 1) launchShootingStar('mom', 10000 + i);
+      // at t=DELAY+100 after the oldest launch it would be flying — but it was dropped, so only mom's exist and they're still waiting
+      const c = fakeCtx();
+      drawShootingStars(c, positions, 100 + DELAY, false, 1);
+      return c.calls.length === 0 && activeShootingStarCount() === MAX;
+    })());
+
+    resetShootingStars();
+    launchShootingStar('mom', 0);
+    drawShootingStars(fakeCtx(), positions, DELAY + 300, true, 1);
+    check('reduced motion clears everything and paints nothing', activeShootingStarCount(), 0);
+
+    resetShootingStars();
+    launchShootingStar('mom', 0, 'pc_a');
+    const c2 = fakeCtx();
+    drawShootingStars(c2, positions, DELAY + FLIGHT * 0.4, false, 0.3);
+    ok('works when zoomed far out', c2.calls.includes('stroke'));
+    resetShootingStars();
+
+    const passCount = results.filter((r) => r.pass).length;
+    document.getElementById('output').innerHTML =
+      `<p>${passCount} / ${results.length} passed</p><ul>` +
+      results.map((r) => `<li class="${r.pass ? 'pass' : 'fail'}">${r.pass ? '✓' : '✗'} ${r.label}${r.pass ? '' : ` (expected ${JSON.stringify(r.expected)}, got ${JSON.stringify(r.actual)})`}</li>`).join('') +
+      '</ul>';
+  </script>
+</body>
+</html>

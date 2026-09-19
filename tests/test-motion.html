@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>test: motion (star map)</title>
+  <style>
+    body { background: #0a0e27; color: #f8f5f0; font: 14px/1.5 monospace; padding: 24px; }
+    .pass { color: #5eead4; }
+    .fail { color: #fb7185; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h1>starMapRender.js / starRenderer.js — motion math assertions</h1>
+  <p>Pure-function tests. Canvas pixel timing is unreliable to observe at sub-1.5s precision
+     through browser automation round-trips, so the underlying draw-in/twinkle math is tested
+     directly here instead — see CLAUDE.md "Motion" table for the values these check against.</p>
+  <div id="output">Running…</div>
+
+  <script type="module">
+    import { easeOutCubic, ringRevealOpacity } from '../js/starmap/starMapRender.js';
+    import { twinkleGlowStrength } from '../js/starmap/starRenderer.js';
+    import { starfieldOffset, STARFIELD_PARALLAX } from '../js/starmap/parallax.js';
+    import { rippleProgress, isRippleActive, STAR_SELECT_RIPPLE_MS } from '../js/starmap/selectRipple.js';
+
+    const results = [];
+    function check(label, actual, expected, tolerance = 0.01) {
+      const pass = typeof expected === 'number'
+        ? Math.abs(actual - expected) <= tolerance
+        : actual === expected;
+      results.push({ label, pass, actual, expected });
+    }
+    function checkTrue(label, condition) {
+      results.push({ label, pass: !!condition, actual: condition, expected: true });
+    }
+
+    // --- easeOutCubic ---
+    check('easeOutCubic(0) == 0', easeOutCubic(0), 0);
+    check('easeOutCubic(1) == 1', easeOutCubic(1), 1);
+    check('easeOutCubic(0.5) == 0.875', easeOutCubic(0.5), 0.875);
+
+    // --- ringRevealOpacity: normal motion, staggered by depth ---
+    check('depth0 at t=0 is invisible', ringRevealOpacity(0, 0, false), 0);
+    check('depth0 at t=1100 (full duration) is fully visible', ringRevealOpacity(0, 1100, false), 1);
+    check('depth1 at t=100 (< 150ms stagger delay) is invisible', ringRevealOpacity(1, 100, false), 0);
+    check('depth1 at t=150 (delay elapsed, draw-in just starting) is invisible', ringRevealOpacity(1, 150, false), 0);
+    check('depth1 at t=150+1100 (delay + full duration) is fully visible', ringRevealOpacity(1, 150 + 1100, false), 1);
+    check('depth2 well past its reveal window is fully visible', ringRevealOpacity(2, 5000, false), 1);
+    checkTrue('deeper rings lag behind shallower ones mid-reveal', ringRevealOpacity(2, 600, false) < ringRevealOpacity(0, 600, false));
+
+    // --- ringRevealOpacity: reduced motion collapses to a uniform fast fade, ignoring depth ---
+    check('reduced motion: fully visible at/after 120ms', ringRevealOpacity(0, 120, true), 1);
+    check('reduced motion depth has no effect on timing', ringRevealOpacity(5, 60, true), ringRevealOpacity(0, 60, true));
+    checkTrue('reduced motion fade is partial before 120ms', ringRevealOpacity(0, 60, true) < 1 && ringRevealOpacity(0, 60, true) > 0);
+
+    // --- twinkleGlowStrength: bounds + decorrelation + periodicity ---
+    const sampleTimes = [0, 137, 500, 1000, 2500, 4000, 9999];
+    let allInBounds = true;
+    for (const t of sampleTimes) {
+      const v = twinkleGlowStrength('mom', t);
+      if (v < 0.55 - 0.001 || v > 1.0001) allInBounds = false;
+    }
+    checkTrue('twinkleGlowStrength stays within [0.55, 1] across sampled times', allInBounds);
+
+    let anyDifferent = false;
+    for (const t of sampleTimes) {
+      if (Math.abs(twinkleGlowStrength('mom', t) - twinkleGlowStrength('dad', t)) > 0.01) {
+        anyDifferent = true;
+        break;
+      }
+    }
+    checkTrue('different ids are decorrelated (diverge at some sampled time)', anyDifferent);
+
+    check(
+      'same id is deterministic across repeated calls at the same time',
+      twinkleGlowStrength('mom', 1234),
+      twinkleGlowStrength('mom', 1234),
+    );
+
+    // --- star select ripple: 400ms ease-out (CLAUDE.md motion table) ---
+    check('ripple duration is 400ms per the motion table', STAR_SELECT_RIPPLE_MS, 400);
+    check('ripple starts at 0', rippleProgress(0), 0);
+    check('ripple ends at 1', rippleProgress(400), 1);
+    check('ripple is ease-out (past halfway at half time)', rippleProgress(200), 0.875);
+    check('ripple clamps before start / after end', rippleProgress(-50) + rippleProgress(900), 1);
+    checkTrue('ripple active mid-flight', isRippleActive(200));
+    checkTrue('ripple inactive once finished', !isRippleActive(400));
+
+    // --- starfield parallax: slower than the foreground, frozen under reduced motion ---
+    check('parallax factor is slower than the foreground (0 < f < 1)', STARFIELD_PARALLAX > 0 && STARFIELD_PARALLAX < 1 ? 1 : 0, 1);
+    check('background moves at a fraction of the pan (x)', starfieldOffset({ x: 200, y: -80 }, false).x, 200 * STARFIELD_PARALLAX);
+    check('background moves at a fraction of the pan (y)', starfieldOffset({ x: 200, y: -80 }, false).y, -80 * STARFIELD_PARALLAX);
+    check('no pan -> no offset', starfieldOffset({ x: 0, y: 0 }, false).x, 0);
+    check('reduced motion freezes the parallax (x)', starfieldOffset({ x: 500, y: 500 }, true).x, 0);
+    check('reduced motion freezes the parallax (y)', starfieldOffset({ x: 500, y: 500 }, true).y, 0);
+
+    // --- render output ---
+    const passCount = results.filter((r) => r.pass).length;
+    document.getElementById('output').innerHTML = [
+      `<p>${passCount} / ${results.length} passed</p>`,
+      '<ul>',
+      ...results.map((r) => `<li class="${r.pass ? 'pass' : 'fail'}">${r.pass ? '✓' : '✗'} ${r.label}${r.pass ? '' : ` (expected ${r.expected}, got ${r.actual})`}</li>`),
+      '</ul>',
+    ].join('\n');
+  </script>
+</body>
+</html>

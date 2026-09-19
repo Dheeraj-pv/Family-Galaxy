@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>test: story mode</title>
+  <style>
+    body { background: #0a0e27; color: #f8f5f0; font: 14px/1.5 monospace; padding: 24px; }
+    .pass { color: #5eead4; } .fail { color: #fb7185; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h1>storyMode.js — schedule assertions</h1>
+  <div id="output">Running…</div>
+
+  <script type="module">
+    import { buildStoryPlan, storyStateAt, eventLabelsForYear, STORY_MS_PER_YEAR, STORY_DWELL_MS } from '../js/timeline/storyMode.js';
+
+    const results = [];
+    const check = (label, actual, expected) => results.push({ label, actual, expected, pass: JSON.stringify(actual) === JSON.stringify(expected) });
+
+    const M = STORY_MS_PER_YEAR; const D = STORY_DWELL_MS;
+
+    // --- gliding plan: 1930 -> 1950 with events at 1940 and 1945 (plus junk that must be ignored) ---
+    const plan = buildStoryPlan({ startYear: 1930, endYear: 1950, eventYears: [1945, 1940, 1940, 1900, 1950, 2100, NaN] });
+    check('segments: travel, rest, travel, rest, travel', plan.segments.map((s) => s.kind), ['travel', 'rest', 'travel', 'rest', 'travel']);
+    check('duplicates/out-of-range/end-year events ignored: 2 rests', plan.segments.filter((s) => s.kind === 'rest').map((s) => s.toYear), [1940, 1945]);
+    check('total time = 20 years of travel + 2 rests', plan.totalMs, 20 * M + 2 * D);
+    check('starts at the start year', storyStateAt(plan, 0), { year: 1930, resting: false, done: false });
+    check('a quarter of the way through the first leg', storyStateAt(plan, 5 * M).year, 1935);
+    check('arrives at the event and rests', storyStateAt(plan, 10 * M + 1), { year: 1940, resting: true, done: false });
+    check('still resting near the end of the dwell', storyStateAt(plan, 10 * M + D - 1).resting, true);
+    check('glides on after the dwell', storyStateAt(plan, 10 * M + D + 2 * M).year, 1942);
+    check('second event rests', storyStateAt(plan, 15 * M + D + 1), { year: 1945, resting: true, done: false });
+    check('done exactly at the total, on the end year', storyStateAt(plan, plan.totalMs), { year: 1950, resting: false, done: true });
+    check('done stays done afterwards', storyStateAt(plan, plan.totalMs + 99999).done, true);
+    check('years never go backwards through the plan', (() => {
+      let last = -Infinity; let ok = true;
+      for (let t = 0; t <= plan.totalMs; t += 37) { const y = storyStateAt(plan, t).year; if (y < last) ok = false; last = y; }
+      return ok;
+    })(), true);
+    check('negative elapsed is treated as the start', storyStateAt(plan, -50).year, 1930);
+
+    // --- starting mid-way: only later events are visited ---
+    const mid = buildStoryPlan({ startYear: 1942, endYear: 1950, eventYears: [1940, 1945] });
+    check('events before the start are skipped', mid.segments.filter((s) => s.kind === 'rest').map((s) => s.toYear), [1945]);
+
+    // --- no events: one straight glide ---
+    const straight = buildStoryPlan({ startYear: 2000, endYear: 2010, eventYears: [] });
+    check('no events -> a single travel segment', straight.segments.length, 1);
+    check('no events -> total is pure travel time', straight.totalMs, 10 * M);
+
+    // --- nothing to play ---
+    const empty = buildStoryPlan({ startYear: 2026, endYear: 2026, eventYears: [] });
+    check('start == end -> empty plan, immediately done', storyStateAt(empty, 0).done, true);
+
+    // --- reduced motion: hops between events, resting on each incl. the end ---
+    const hop = buildStoryPlan({ startYear: 1930, endYear: 1950, eventYears: [1940, 1945], jump: true });
+    check('jump: only rests', hop.segments.map((s) => s.kind), ['rest', 'rest', 'rest']);
+    check('jump: visits events then the end year', hop.segments.map((s) => s.toYear), [1940, 1945, 1950]);
+    check('jump: first rest is at t=0', storyStateAt(hop, 0), { year: 1940, resting: true, done: false });
+    check('jump: second stop after one dwell', storyStateAt(hop, D + 5).year, 1945);
+    check('jump: total is one dwell per stop', hop.totalMs, 3 * D);
+    check('jump: no gliding years appear', (() => {
+      const seen = new Set();
+      for (let t = 0; t < hop.totalMs; t += 50) seen.add(storyStateAt(hop, t).year);
+      return [...seen].sort();
+    })(), [1940, 1945, 1950]);
+
+    // --- captions ---
+    const events = [{ year: 1962, label: 'Wedding' }, { year: 1962, label: 'Moved house' }, { year: 1966, label: 'Mom born' }];
+    check('labels for a year with two events', eventLabelsForYear(events, 1962), ['Wedding', 'Moved house']);
+    check('labels for a year with none', eventLabelsForYear(events, 1970), []);
+
+    // --- pacing sanity: the reference family (1938 -> 2026, 4 events) is a calm half-minute ---
+    const family = buildStoryPlan({ startYear: 1930, endYear: 2026, eventYears: [1962, 1966, 1989, 1991] });
+    check('reference family story lasts between 20s and 60s', family.totalMs >= 20000 && family.totalMs <= 60000, true);
+
+    const passCount = results.filter((r) => r.pass).length;
+    document.getElementById('output').innerHTML =
+      `<p>${passCount} / ${results.length} passed</p><ul>` +
+      results.map((r) => `<li class="${r.pass ? 'pass' : 'fail'}">${r.pass ? '✓' : '✗'} ${r.label}${r.pass ? '' : ` (expected ${JSON.stringify(r.expected)}, got ${JSON.stringify(r.actual)})`}</li>`).join('') +
+      '</ul>';
+  </script>
+</body>
+</html>

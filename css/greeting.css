@@ -1,0 +1,111 @@
+/* Anniversary greeting: a small translucent pill just under the header (see
+   js/greeting/anniversaryBanner.js). The wrapper spans the width but ignores the pointer, so the
+   map underneath stays draggable; only the pill catches clicks. Sits above the map but below the
+   profile card (4), the header/search dropdown (5) and modals (10). Tokens only. */
+
+#anniversary-banner {
+  position: absolute;
+  top: calc(var(--header-height) + 10px);
+  left: 0;
+  right: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 0 16px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--duration-timeline-fade) ease;
+}
+#anniversary-banner[hidden] { display: none; }
+#anniversary-banner.is-open { opacity: 1; }
+
+.greeting__pill,
+.greeting__list {
+  pointer-events: auto;
+  max-width: min(560px, 100%);
+  background: rgba(26, 31, 58, 0.88);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 216, 155, 0.3);
+  box-shadow: 0 6px 24px rgba(10, 14, 39, 0.5), 0 0 18px rgba(255, 216, 155, 0.12);
+  color: var(--color-text-primary);
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  line-height: 1.35;
+}
+
+.greeting__pill {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 6px 6px 14px;
+  border-radius: 22px;
+}
+
+.greeting__icon { flex: 0 0 auto; font-size: 1rem; line-height: 1; }
+
+.greeting__text {
+  min-width: 0;
+  padding: 4px 2px;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+button.greeting__text { cursor: pointer; }
+button.greeting__text:hover { color: var(--color-star-gold); text-decoration: underline; text-underline-offset: 3px; }
+
+.greeting__more,
+.greeting__close {
+  flex: 0 0 auto;
+  border: none;
+  cursor: pointer;
+  font-family: var(--font-body);
+}
+.greeting__more {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(255, 216, 155, 0.12);
+  color: var(--color-star-gold);
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+.greeting__more:hover { background: rgba(255, 216, 155, 0.22); }
+.greeting__close {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: none;
+  color: var(--color-text-primary);
+  font-size: 1.2rem;
+  line-height: 1;
+}
+.greeting__close:hover { background: rgba(248, 245, 240, 0.12); }
+
+.greeting__pill button:focus-visible {
+  outline: 2px solid var(--color-star-gold);
+  outline-offset: 2px;
+}
+
+.greeting__list {
+  list-style: none;
+  margin: 0;
+  padding: 8px 14px;
+  border-radius: 16px;
+}
+.greeting__list[hidden] { display: none; }
+.greeting__item { display: flex; align-items: baseline; gap: 10px; padding: 3px 0; }
+
+/* On small screens the zoom +/- stack sits top-right of the map (star-map.css), so the greeting
+   keeps clear of it: 12px gutter + 44px button + 8px breathing room on the right. */
+@media (max-width: 480px), (max-height: 480px) {
+  #anniversary-banner { padding: 0 64px 0 10px; }
+  .greeting__pill { padding-left: 12px; font-size: 0.8rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #anniversary-banner { transition-duration: var(--duration-reduced-motion-fade); }
+}

@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>test: headerSearch</title>
+  <style>
+    body { background: #0a0e27; color: #f8f5f0; font: 14px/1.5 monospace; padding: 24px; }
+    .pass { color: #5eead4; } .fail { color: #fb7185; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h1>headerSearch.js — searchPeople</h1>
+  <div id="output">Running…</div>
+  <script type="module">
+    import { normalizePerson } from '../js/data/schema.js';
+    import { searchPeople } from '../js/header/headerSearch.js';
+
+    const results = [];
+    const check = (label, actual, expected) => results.push({ label, actual, expected, pass: JSON.stringify(actual) === JSON.stringify(expected) });
+    const raw = await fetch('../data/family.json', { cache: 'no-store' }).then((r) => r.json());
+    const people = raw.people.map(normalizePerson);
+    const ids = (q, limit) => searchPeople(people, q, limit).map((p) => p.id);
+
+    check('empty query -> nothing', ids(''), []);
+    check('whitespace query -> nothing', ids('   '), []);
+    check('exact-ish name', ids('mom'), ['mom']);
+    check('case-insensitive', ids('MOM'), ['mom']);
+    check('name prefix beats later matches', ids('gra')[0] === 'grandfather' || ids('gra')[0] === 'grandmother', true);
+    check('finds both grandparents', ids('grand').sort(), ['grandfather', 'grandmother']);
+    check('word-prefix inside hyphenated name (husband-aunty1)', ids('aunty1').includes('husband-aunty1'), true);
+    check('name prefix ranks above word-prefix', ids('aunty1').slice(0, 2), ['aunty1', 'husband-aunty1']);
+    check('matches "Me!" by name', ids('me!'), ['me']);
+    check('family-role search finds every cousin spouse', ids('cousin spouse', 20).length, 4);
+    check('unknown -> nothing', ids('zzzz'), []);
+    check('limit is honoured', ids('c', 3).length, 3);
+    check('results are people objects', typeof searchPeople(people, 'mom')[0].name, 'string');
+
+    const passCount = results.filter((r) => r.pass).length;
+    document.getElementById('output').innerHTML =
+      `<p>${passCount} / ${results.length} passed</p><ul>` +
+      results.map((r) => `<li class="${r.pass ? 'pass' : 'fail'}">${r.pass ? '✓' : '✗'} ${r.label}${r.pass ? '' : ` (expected ${JSON.stringify(r.expected)}, got ${JSON.stringify(r.actual)})`}</li>`).join('') + '</ul>';
+  </script>
+</body>
+</html>

@@ -1,0 +1,118 @@
+/* App header: wordmark left; search, Add Postcard and avatar right. Translucent navy with a
+   backdrop blur so the sky shows through, per CLAUDE.md "Layout". Responsive down to 360px. */
+
+#app-header {
+  position: relative;
+  z-index: 5; /* the search dropdown must sit above the profile card and the map */
+  justify-content: flex-start;
+  background: rgba(10, 14, 39, 0.6);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(255, 216, 155, 0.12);
+  padding-left: max(24px, env(safe-area-inset-left));
+  padding-right: max(24px, env(safe-area-inset-right));
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-right: auto;
+  color: var(--color-text-primary);
+  text-decoration: none;
+  border-radius: 8px;
+}
+.brand:focus-visible { outline: 2px solid var(--color-star-gold); outline-offset: 4px; }
+.brand__icon {
+  fill: var(--color-star-gold);
+  filter: drop-shadow(0 0 6px rgba(255, 216, 155, 0.7));
+  flex-shrink: 0;
+}
+.brand__name {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 500;
+  font-size: 1.3rem;
+  white-space: nowrap;
+}
+
+.search { position: relative; }
+.search__input {
+  width: 220px;
+  padding: 9px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.5); /* 4.9:1 vs the field; the old .18 failed WCAG 1.4.11 (3:1) */
+  border-radius: 999px;
+  background: rgba(10, 14, 39, 0.55);
+  color: var(--color-text-primary);
+  font-size: 0.9rem;
+  color-scheme: dark;
+  transition: border-color var(--duration-corkboard-hover) ease-out, width var(--duration-corkboard-hover) ease-out;
+}
+.search__input::placeholder { color: var(--color-text-secondary); }
+.search__input:focus-visible {
+  outline: 2px solid var(--color-star-gold);
+  outline-offset: 2px;
+  border-color: rgba(255, 216, 155, 0.5);
+}
+
+.search__list {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  min-width: 260px;
+  list-style: none;
+  padding: 6px;
+  border-radius: 14px;
+  background: rgba(26, 31, 58, 0.97);
+  border: 1px solid rgba(255, 216, 155, 0.25);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5), 0 0 30px rgba(255, 216, 155, 0.06);
+}
+.search__option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.search__option:hover,
+.search__option[aria-selected='true'] { background: rgba(255, 216, 155, 0.12); }
+.search__name { flex: 1; font-size: 0.9rem; }
+.search__role { font-size: 0.6rem; color: var(--color-text-secondary); }
+.search__empty { padding: 10px; font-size: 0.85rem; font-style: italic; color: var(--color-text-secondary); }
+
+.avatar-button {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border: 1px solid rgba(255, 216, 155, 0.4);
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, var(--color-star-white), var(--color-star-gold));
+  font-size: 1.2rem;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 0 16px rgba(255, 216, 155, 0.3);
+}
+.avatar-button:focus-visible { outline: 2px solid var(--color-text-primary); outline-offset: 3px; }
+.avatar-button[hidden] { display: none; }
+
+@media (max-width: 720px) {
+  #app-header {
+    gap: 10px;
+    padding-left: max(12px, env(safe-area-inset-left));
+    padding-right: max(12px, env(safe-area-inset-right));
+  }
+  .brand__name { display: none; } /* the star icon alone stands in for the wordmark */
+  .brand { margin-right: 0; }
+  .search { flex: 1; min-width: 0; }
+  .search__input { width: 100%; }
+  .search__list { min-width: 0; }
+}
+
+@media (max-width: 420px) {
+  .cta-button { min-width: 44px; min-height: 44px; padding: 10px 14px; }
+  .avatar-button { width: 44px; height: 44px; }
+  .search__input { padding: 12px 14px; }
+  .cta-button__text { display: none; } /* "+" only; the button keeps its aria-label */
+}

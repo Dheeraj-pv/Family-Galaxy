@@ -1,0 +1,206 @@
+/* Timeline ribbon: fixed strip along the bottom (120px desktop, 60px on mobile — see layout.css).
+   Translucent midnight with a soft gold hairline on top, like the profile card. Only design
+   tokens; the playhead has no animated transition beyond the reduced-motion duration token. */
+
+#timeline-container {
+  background: rgba(26, 31, 58, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-top: 1px solid rgba(255, 216, 155, 0.25);
+}
+
+.timeline {
+  display: flex;
+  height: 100%;
+  align-items: stretch;
+  gap: 16px;
+  padding: 0 16px;
+}
+
+.timeline__readout {
+  flex: 0 0 176px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+}
+.timeline__year-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.timeline__year {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 500;
+  font-size: 2.3rem;
+  line-height: 1;
+  color: var(--color-star-gold);
+  text-shadow: 0 0 18px rgba(255, 216, 155, 0.4);
+  font-variant-numeric: tabular-nums;
+}
+.timeline__play,
+.timeline__add {
+  position: relative;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 216, 155, 0.45);
+  background: rgba(255, 216, 155, 0.08);
+  color: var(--color-star-gold);
+  cursor: pointer;
+  transition: background var(--duration-corkboard-hover) ease-out, box-shadow var(--duration-corkboard-hover) ease-out;
+}
+.timeline__play::after,
+.timeline__add::after { content: ''; position: absolute; inset: -8px; } /* roomy touch target */
+.timeline__play:hover,
+.timeline__add:hover { background: rgba(255, 216, 155, 0.18); box-shadow: 0 0 14px rgba(255, 216, 155, 0.35); }
+.timeline__play:focus-visible,
+.timeline__add:focus-visible { outline: 2px solid var(--color-text-primary); outline-offset: 3px; }
+.timeline__caption {
+  min-height: 1em;
+  margin-top: 6px;
+  font-size: 0.6rem;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.timeline__viewport {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  touch-action: none; /* scrubbing / pinching must not scroll or zoom the page */
+  cursor: ew-resize;
+  user-select: none;
+}
+
+.timeline__axis,
+.timeline__playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+}
+.timeline__axis { will-change: transform; }
+
+.timeline__line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 2px;
+  margin-top: -1px;
+  background: rgba(248, 245, 240, 0.18);
+}
+
+.timeline__tick {
+  position: absolute;
+  top: 50%;
+  width: 1px;
+  height: 10px;
+  margin-top: -5px;
+  background: rgba(248, 245, 240, 0.4);
+}
+.timeline__tick-label {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.6rem;
+  letter-spacing: 0.14em;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+.timeline__event {
+  position: absolute;
+  top: 50%;
+  width: 28px;
+  height: 28px;
+  margin: -14px 0 0 -14px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  --event-color: var(--color-shared);
+}
+.timeline__event[data-color='maternal'] { --event-color: var(--color-maternal); }
+.timeline__event[data-color='paternal'] { --event-color: var(--color-paternal); }
+.timeline__event[data-color='shared'] { --event-color: var(--color-shared); }
+.timeline__event-dot {
+  display: block;
+  width: 10px;
+  height: 10px;
+  margin: 9px;
+  border-radius: 50%;
+  background: var(--event-color);
+  box-shadow: 0 0 10px var(--event-color);
+}
+/* A moment the user added wears a thin gold ring, so it reads as "yours" and as pressable for
+   edit/remove; family.json events stay plain dots. */
+.timeline__event--mine .timeline__event-dot {
+  box-shadow: 0 0 10px var(--event-color), 0 0 0 2px rgba(255, 216, 155, 0.6);
+}
+.timeline__event:hover .timeline__event-dot,
+.timeline__event:focus-visible .timeline__event-dot { transform: scale(1.4); }
+.timeline__event:focus-visible { outline: 2px solid var(--color-star-gold); outline-offset: 0; border-radius: 50%; }
+
+/* The playhead spans the same coordinate space as the axis; --x (set from JS) places it. It
+   never intercepts pointers — the whole viewport is the scrub area. */
+.timeline__playhead {
+  pointer-events: none;
+  z-index: 2;
+}
+.timeline__playhead::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--x, 0);
+  width: 2px;
+  margin-left: -1px;
+  background: var(--color-star-white);
+  box-shadow: 0 0 12px rgba(255, 216, 155, 0.8);
+}
+.timeline__grip {
+  position: absolute;
+  top: 4px;
+  left: var(--x, 0);
+  width: 18px;
+  height: 18px;
+  margin-left: -9px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, var(--color-star-white), var(--color-star-gold));
+  box-shadow: 0 0 16px rgba(255, 216, 155, 0.7);
+}
+.timeline__playhead:focus-visible { outline: none; }
+.timeline__playhead:focus-visible .timeline__grip {
+  outline: 2px solid var(--color-text-primary);
+  outline-offset: 3px;
+}
+
+@media (max-width: 480px), (max-height: 480px) {
+  .timeline { gap: 10px; padding: 0 10px; }
+  .timeline__readout { flex-basis: 130px; }
+  .timeline__year-row { gap: 8px; }
+  .timeline__year { font-size: 1.5rem; }
+  .timeline__play,
+  .timeline__add { width: 26px; height: 26px; }
+  .timeline__caption { margin-top: 3px; font-size: 0.6rem; letter-spacing: 0.08em; }
+  .timeline__tick { height: 8px; margin-top: -4px; }
+  .timeline__tick-label { top: 10px; font-size: 0.6rem; letter-spacing: 0.08em; }
+  .timeline__grip { width: 14px; height: 14px; margin-left: -7px; top: 2px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .timeline__event-dot { transition: none; }
+  .timeline__event:hover .timeline__event-dot,
+  .timeline__event:focus-visible .timeline__event-dot { transform: none; }
+}

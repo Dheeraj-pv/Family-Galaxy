@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>test: timeline events</title>
+  <style>
+    body { background: #0a0e27; color: #f8f5f0; font: 14px/1.5 monospace; padding: 24px; }
+    .pass { color: #5eead4; } .fail { color: #fb7185; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h1>eventModel.js + eventActions.js — timeline moments</h1>
+  <div id="output">Running…</div>
+
+  <script type="module">
+    import {
+      validateEventInput, isRealDate, isEditableEvent, newEventId, withEventReplaced, withEventRemoved,
+      formatEventWhen, eventCaption, markerAriaLabel, maxEventYear, LABEL_MAX_LENGTH, MIN_EVENT_YEAR, EVENT_COLORS,
+    } from '../js/timeline/eventModel.js';
+    import { setEvents, getEvents } from '../js/state.js';
+    import { on } from '../js/utils/events.js';
+    import { addEvent, editEvent, deleteEvent } from '../js/timeline/eventActions.js';
+    import { getStoredEvents } from '../js/data/localStorageStore.js';
+    import { normalizeEvent } from '../js/data/schema.js';
+
+    const results = [];
+    const check = (label, actual, expected) => results.push({ label, actual, expected, pass: JSON.stringify(actual) === JSON.stringify(expected) });
+
+    const ids = ['mom', 'dad'];
+    const NOW = 2026;
+    const ok = { year: '1998', label: ' Moved to Chennai ', color: 'maternal', personId: 'mom', month: '', day: '' };
+
+    // --- validation ---
+    const good = validateEventInput(ok, ids, NOW);
+    check('valid input is accepted and trimmed', good.ok && good.event, { year: 1998, month: null, day: null, personId: 'mom', label: 'Moved to Chennai', color: 'maternal' });
+    check('year-only, "everyone" is fine', validateEventInput({ ...ok, personId: '' }, ids, NOW).event.personId, null);
+    check('numeric year (not a string) is fine', validateEventInput({ ...ok, year: 1998 }, ids, NOW).ok, true);
+    check('empty form flags year/label/color', Object.keys(validateEventInput({ year: '', label: '', color: '', personId: '', month: '', day: '' }, ids, NOW).errors).sort(), ['color', 'label', 'year']);
+    check('non-numeric year rejected', validateEventInput({ ...ok, year: 'abc' }, ids, NOW).errors.year !== undefined, true);
+    check('decimal year rejected', validateEventInput({ ...ok, year: '1998.5' }, ids, NOW).errors.year !== undefined, true);
+    check('year before 1800 rejected', validateEventInput({ ...ok, year: String(MIN_EVENT_YEAR - 1) }, ids, NOW).errors.year !== undefined, true);
+    check('1800 itself is allowed', validateEventInput({ ...ok, year: '1800' }, ids, NOW).ok, true);
+    check('next year is allowed', validateEventInput({ ...ok, year: String(NOW + 1) }, ids, NOW).ok, true);
+    check('two years ahead rejected', validateEventInput({ ...ok, year: String(NOW + 2) }, ids, NOW).errors.year !== undefined, true);
+    check('max year is current + 1', maxEventYear(2026), 2027);
+    check('over-long label rejected', validateEventInput({ ...ok, label: 'x'.repeat(LABEL_MAX_LENGTH + 1) }, ids, NOW).errors.label !== undefined, true);
+    check('label at the limit is accepted', validateEventInput({ ...ok, label: 'x'.repeat(LABEL_MAX_LENGTH) }, ids, NOW).ok, true);
+    check('whitespace-only label rejected', validateEventInput({ ...ok, label: '   ' }, ids, NOW).errors.label !== undefined, true);
+    check('unknown colour rejected', validateEventInput({ ...ok, color: 'purple' }, ids, NOW).errors.color !== undefined, true);
+    check('unknown person rejected', validateEventInput({ ...ok, personId: 'ghost' }, ids, NOW).errors.personId !== undefined, true);
+    check('the three colours are the existing tokens', EVENT_COLORS.map((c) => c.value), ['maternal', 'paternal', 'shared']);
+
+    // --- month + day ---
+    const dated = validateEventInput({ ...ok, month: '6', day: '14' }, ids, NOW);
+    check('month + day become numbers', dated.ok && [dated.event.month, dated.event.day], [6, 14]);
+    check('month without day rejected', validateEventInput({ ...ok, month: '6', day: '' }, ids, NOW).errors.date !== undefined, true);
+    check('day without month rejected', validateEventInput({ ...ok, month: '', day: '6' }, ids, NOW).errors.date !== undefined, true);
+    check('31 April rejected', validateEventInput({ ...ok, month: '4', day: '31' }, ids, NOW).errors.date !== undefined, true);
+    check('month 13 rejected', validateEventInput({ ...ok, month: '13', day: '1' }, ids, NOW).errors.date !== undefined, true);
+    check('day 0 rejected', validateEventInput({ ...ok, month: '1', day: '0' }, ids, NOW).errors.date !== undefined, true);
+    check('29 Feb in a leap year (1996) accepted', validateEventInput({ ...ok, year: '1996', month: '2', day: '29' }, ids, NOW).ok, true);
+    check('29 Feb in a non-leap year (1998) rejected', validateEventInput({ ...ok, month: '2', day: '29' }, ids, NOW).errors.date !== undefined, true);
+    check('29 Feb 1900 rejected (century, not leap)', validateEventInput({ ...ok, year: '1900', month: '2', day: '29' }, ids, NOW).ok, false);
+    check('29 Feb 2000 accepted (leap century)', validateEventInput({ ...ok, year: '2000', month: '2', day: '29' }, ids, NOW).ok, true);
+    check('isRealDate helper', [isRealDate(2024, 2, 29), isRealDate(2023, 2, 29), isRealDate(2023, 12, 31), isRealDate(2023, 4, 31)], [true, false, true, false]);
+
+    // --- ids / editable ---
+    const a = newEventId(); const b = newEventId();
+    check('ids look like ev_...', /^ev_[a-z0-9]{6,}$/.test(a), true);
+    check('ids are unique', a !== b, true);
+    check('an event with an id is editable', isEditableEvent({ id: 'ev_1' }), true);
+    check('a family.json event (no id) is read-only', isEditableEvent({ year: 1962 }), false);
+    check('null id (as normalised) is read-only', isEditableEvent({ id: null }), false);
+    check('empty id is read-only', isEditableEvent({ id: '' }), false);
+
+    const list = [{ id: 'a', label: '1' }, { id: 'b', label: '2' }, { id: null, label: 'seed' }];
+    check('replace swaps only the matching id', withEventReplaced(list, 'b', { id: 'b', label: 'NEW' }).map((e) => e.label), ['1', 'NEW', 'seed']);
+    check('replace does not mutate the input', list[1].label, '2');
+    check('remove drops only the matching id', withEventRemoved(list, 'a').map((e) => e.label), ['2', 'seed']);
+    check('remove never drops seed events (no id)', withEventRemoved(list, undefined).length, 3);
+    check('remove with null id keeps everything', withEventRemoved(list, null).length, 3);
+
+    // --- wording ---
+    check('when: year only', formatEventWhen({ year: 1998, month: null, day: null }), '1998');
+    check('when: full date', formatEventWhen({ year: 1998, month: 6, day: 14 }), '14 June 1998');
+    check('caption', eventCaption({ year: 1998, label: 'Moved to Chennai' }), '1998 · Moved to Chennai');
+    const people = [{ id: 'mom', name: 'Mom' }];
+    check('marker label for a seed event', markerAriaLabel({ year: 1962, label: 'Wedding', personId: 'grandmother' }, []), '1962: Wedding. Move the timeline to this year.');
+    check('marker label names the person', markerAriaLabel({ year: 1998, label: 'Moved to Chennai', personId: 'mom' }, people), '1998: Moved to Chennai (Mom). Move the timeline to this year.');
+    check('marker label for a user event mentions edit/remove', markerAriaLabel({ id: 'ev_1', year: 1998, label: 'X', personId: null }, people).endsWith('Opens options to edit or remove this moment.'), true);
+
+    // --- actions: state + localStorage + bus events (uses the real store; cleaned up after) ---
+    const saveBefore = localStorage.getItem('familyGalaxy.events.v1');
+    localStorage.removeItem('familyGalaxy.events.v1');
+    setEvents([{ id: null, year: 1962, label: 'Wedding', color: 'maternal' }]);
+    const heard = [];
+    on('eventAdded', ({ detail }) => heard.push(['added', detail.event.label]));
+    on('eventEdited', ({ detail }) => heard.push(['edited', detail.event.label]));
+    on('eventDeleted', ({ detail }) => heard.push(['deleted', detail.eventId]));
+
+    const saved = addEvent(good.event);
+    check('add gives it an id', isEditableEvent(saved), true);
+    check('add appends to state (seed kept)', getEvents().map((e) => e.label), ['Wedding', 'Moved to Chennai']);
+    check('add persists to localStorage', getStoredEvents().map((e) => e.label), ['Moved to Chennai']);
+    check('the saved event keeps month/day/personId fields', ['month', 'day', 'personId'].every((k) => k in getStoredEvents()[0]), true);
+    check('a stored event survives normalizeEvent with its id and fields', (() => { const n = normalizeEvent(getStoredEvents()[0]); return [n.id === saved.id, n.month, n.day, n.personId, n.year]; })(), [true, null, null, 'mom', 1998]);
+    editEvent(saved.id, { ...good.event, label: 'Moved to Delhi', month: 6, day: 14 });
+    check('edit replaces in state', getEvents().map((e) => e.label), ['Wedding', 'Moved to Delhi']);
+    check('edit keeps the id', getEvents()[1].id, saved.id);
+    check('edit persists (with month/day)', [getStoredEvents()[0].label, getStoredEvents()[0].month, getStoredEvents()[0].day], ['Moved to Delhi', 6, 14]);
+    deleteEvent(saved.id);
+    check('delete removes it from state, keeps the seed', getEvents().map((e) => e.label), ['Wedding']);
+    check('delete removes it from localStorage', getStoredEvents(), []);
+    check('bus events fired in order', heard, [['added', 'Moved to Chennai'], ['edited', 'Moved to Delhi'], ['deleted', saved.id]]);
+
+    localStorage.setItem('familyGalaxy.events.v1', '{"not":"an array"}');
+    check('a corrupt stored value reads as no events', getStoredEvents(), []);
+    if (saveBefore === null) localStorage.removeItem('familyGalaxy.events.v1'); else localStorage.setItem('familyGalaxy.events.v1', saveBefore);
+
+    const passCount = results.filter((r) => r.pass).length;
+    document.getElementById('output').innerHTML =
+      `<p>${passCount} / ${results.length} passed</p><ul>` +
+      results.map((r) => `<li class="${r.pass ? 'pass' : 'fail'}">${r.pass ? '✓' : '✗'} ${r.label}${r.pass ? '' : ` (expected ${JSON.stringify(r.expected)}, got ${JSON.stringify(r.actual)})`}</li>`).join('') +
+      '</ul>';
+  </script>
+</body>
+</html>

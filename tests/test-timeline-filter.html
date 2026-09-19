@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>test: timelineFilter</title>
+  <style>
+    body { background: #0a0e27; color: #f8f5f0; font: 14px/1.5 monospace; padding: 24px; }
+    .pass { color: #5eead4; } .fail { color: #fb7185; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h1>timelineFilter.js — assertions against data/family.json</h1>
+  <div id="output">Running…</div>
+
+  <script type="module">
+    import { normalizePerson, normalizeEvent } from '../js/data/schema.js';
+    import {
+      isPersonPresent, personOpacityForYear, absenceReason, getTimelineRange,
+      FADED_OPACITY, PRESENT_OPACITY,
+    } from '../js/timeline/timelineFilter.js';
+
+    const results = [];
+    const check = (label, actual, expected) => results.push({ label, actual, expected, pass: actual === expected });
+
+    const raw = await fetch('../data/family.json', { cache: 'no-store' }).then((r) => r.json());
+    const people = raw.people.map(normalizePerson);
+    const events = raw.events.map(normalizeEvent);
+    const byId = Object.fromEntries(people.map((p) => [p.id, p]));
+
+    // --- edge cases at birth/death boundaries (synthetic person: 1950-2000) ---
+    const p = { birth: 1950, death: 2000 };
+    check('absent the year before birth', isPersonPresent(p, 1949), false);
+    check('present in the birth year', isPersonPresent(p, 1950), true);
+    check('present in the death year (inclusive)', isPersonPresent(p, 2000), true);
+    check('absent the year after death', isPersonPresent(p, 2001), false);
+    check('null death = still living', isPersonPresent({ birth: 1980, death: null }, 2100), true);
+    check('null birth = never hidden (unknown, not absent)', isPersonPresent({ birth: null, death: null }, 1000), true);
+
+    // --- opacity + reasons ---
+    check('present -> full opacity', personOpacityForYear(p, 1975), PRESENT_OPACITY);
+    check('absent -> faded 0.15', personOpacityForYear(p, 1900), FADED_OPACITY);
+    check('faded value matches the motion table (0.15)', FADED_OPACITY, 0.15);
+    check('reason: unborn', absenceReason(p, 1900), 'unborn');
+    check('reason: passed', absenceReason(p, 2010), 'passed');
+    check('reason: none when present', absenceReason(p, 1975), null);
+
+    // --- against the real fixture ---
+    check('every person now has a birth year', people.every((x) => Number.isFinite(x.birth)), true);
+    check('no one is born after their death', people.every((x) => x.death == null || x.death >= x.birth), true);
+    check('me (b.1991) absent in 1990', isPersonPresent(byId.me, 1990), false);
+    check('me present in 1991', isPersonPresent(byId.me, 1991), true);
+    check('grandfather present in 1962 (the wedding)', isPersonPresent(byId.grandfather, 1962), true);
+    check('grandfather absent after 2012', isPersonPresent(byId.grandfather, 2013), false);
+    check('grandmother present in 2021', isPersonPresent(byId.grandmother, 2021), true);
+    check('grandmother absent from 2022 (so the founders\' black hole dims)', isPersonPresent(byId.grandmother, 2022), false);
+    check('black hole lit while either founder is present (2015: only grandmother)', [byId.grandfather, byId.grandmother].some((f) => isPersonPresent(f, 2015)), true);
+    check('black hole dims once BOTH founders are gone (2022)', [byId.grandfather, byId.grandmother].some((f) => isPersonPresent(f, 2022)), false);
+    check('mom present in her event year 1966', isPersonPresent(byId.mom, 1966), true);
+    check('every child is born after both parents were (roughly: after the older parent)',
+      people.every((c) => c.parents.every((id) => byId[id].birth < c.birth)), true);
+    check('everyone alive in an event year exists at its personId', events.every((e) => isPersonPresent(byId[e.personId], e.year)), true);
+    check('in 1962 only the founders and husband-aunty1 exist',
+      people.filter((x) => isPersonPresent(x, 1962)).map((x) => x.id).sort().join(','),
+      'grandfather,grandmother,husband-aunty1');
+
+    // --- range ---
+    const range = getTimelineRange(people, events, 2026);
+    check('range starts at the decade of the earliest birth (1930)', range.min, 1930);
+    check('range ends at the current year', range.max, 2026);
+    check('empty data falls back to a 100-year span', JSON.stringify(getTimelineRange([], [], 2026)), JSON.stringify({ min: 1926, max: 2026 }));
+    check('an event in the future stretches the range', getTimelineRange([], [{ year: 2040 }], 2026).max, 2040);
+
+    const passCount = results.filter((r) => r.pass).length;
+    document.getElementById('output').innerHTML =
+      `<p>${passCount} / ${results.length} passed</p><ul>` +
+      results.map((r) => `<li class="${r.pass ? 'pass' : 'fail'}">${r.pass ? '✓' : '✗'} ${r.label}${r.pass ? '' : ` (expected ${r.expected}, got ${r.actual})`}</li>`).join('') +
+      '</ul>';
+  </script>
+</body>
+</html>

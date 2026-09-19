@@ -1,0 +1,56 @@
+/* "How are we related?" — the little finder inside the profile card. Only design tokens; the
+   result sentence is set in the same italic display face as names, in soft gold. */
+
+.relationship {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.relationship__label {
+  font-size: 0.7rem;
+  color: var(--color-text-secondary);
+}
+
+.relationship__select {
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.5); /* ~4.9:1 vs the field, same as the search box (WCAG 1.4.11) */
+  border-radius: 999px;
+  background: rgba(10, 14, 39, 0.55);
+  color: var(--color-text-primary);
+  font-family: var(--font-body);
+  font-size: 0.9rem;
+  color-scheme: dark;
+  cursor: pointer;
+  transition: border-color var(--duration-corkboard-hover) ease-out;
+}
+.relationship__select:hover { border-color: rgba(255, 216, 155, 0.6); }
+.relationship__select:focus-visible {
+  outline: 2px solid var(--color-star-gold);
+  outline-offset: 2px;
+  border-color: rgba(255, 216, 155, 0.5);
+}
+
+.relationship__result {
+  margin: 4px 0 0;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 500;
+  font-size: 1rem;
+  line-height: 1.4;
+  color: var(--color-star-gold);
+  animation: relationship-in var(--duration-timeline-fade) ease both;
+}
+.relationship__result:empty { display: none; }
+
+@keyframes relationship-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (max-width: 420px) {
+  .relationship__select { min-height: 44px; }
+}

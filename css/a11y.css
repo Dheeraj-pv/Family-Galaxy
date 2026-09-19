@@ -1,0 +1,52 @@
+/* Cross-cutting accessibility rules. Linked LAST so it can refine component styles without
+   editing every component file. (.visually-hidden lives in base.css.) */
+
+/* Skip link: first Tab stop, invisible until focused. */
+.skip-link {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  z-index: 20;
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: var(--color-midnight);
+  color: var(--color-star-gold);
+  border: 2px solid var(--color-star-gold);
+  font-weight: 600;
+  text-decoration: none;
+  transform: translateY(-200%);
+}
+.skip-link:focus-visible { transform: translateY(0); }
+
+/* Containers that take programmatic focus (skip-link target, the dialog itself) are not
+   interactive; the focus ring belongs on the controls inside them. */
+#timeline-container:focus,
+#profile-card:focus { outline: none; }
+
+/* Tab panels with no focusable content are made focusable by profileCard.js so keyboard users
+   can reach their text; give that stop a visible ring. */
+.profile-card__panel:focus-visible {
+  outline: 2px solid var(--color-star-gold);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+
+/* Contrast: the empty-state text was dimmed (opacity .75) below 4.5:1 on the card surface;
+   secondary text at full strength is 6.2:1. */
+.profile-card__placeholder { opacity: 1; }
+
+/* Reduced motion: every transition/animation in the app collapses to the 120ms cross-fade
+   (CLAUDE.md motion table). Slide/scale/rotate distances are already removed per component;
+   this is the safety net that guarantees no component keeps a long or bouncy timing. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: var(--duration-reduced-motion-fade) !important;
+    transition-timing-function: linear !important;
+    animation-duration: var(--duration-reduced-motion-fade) !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
+  .skip-link { transition: none !important; }
+}

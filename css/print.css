@@ -1,0 +1,213 @@
+/* The printable family sheet. #print-sheet is invisible on screen; under @media print it is the ONLY
+   thing on the page (the dark app, modals, popovers and the tour are all hidden), drawn as a warm
+   keepsake: Aged Cream paper, Deep Space Navy ink, Soft Gold for ornaments and rules only (gold on
+   cream is too faint to carry text). Browsers drop backgrounds unless asked, so nothing depends on
+   the cream: the ink is dark enough on plain white too. Tokens only, no new colours or fonts. */
+
+/* ---- on screen: never visible, never in layout, never read out ----------------------------- */
+@media screen {
+  #print-sheet:not(.print-sheet--preview) { display: none !important; }
+}
+
+/* ---- the switch: print only the sheet -------------------------------------------------------- */
+@page {
+  size: auto;
+  margin: 14mm;
+}
+
+@media print {
+  html, body {
+    height: auto !important;
+    overflow: visible !important;
+    background: var(--color-paper) !important;
+    color: var(--color-navy-deep) !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  body::before, body::after { display: none !important; }
+
+  /* Everything that isn't the sheet: the app shell, live region, banner, stats card, tour, and any
+     modal or popover mounted straight on <body> (Then & Now, add-postcard, moment menu...). */
+  body > *:not(#print-sheet),
+  #app-shell, #sr-live, #anniversary-banner, #stats-card, #tour-card,
+  .then-now, .moment-menu, [data-no-print], [class^='tour'] {
+    display: none !important;
+  }
+
+  #print-sheet:not([hidden]) { display: block; }
+  #print-sheet[hidden] { display: none; }
+}
+
+/* ---- the sheet itself (also used by the on-screen preview in tests/test-print-sheet.html) -------- */
+#print-sheet {
+  --ink: var(--color-navy-deep);
+  --ink-soft: rgba(10, 14, 39, 0.72);      /* secondary text: navy at 72% is ~6:1 on the cream */
+  --rule: rgba(10, 14, 39, 0.28);
+  --gold: var(--color-star-gold);
+  color: var(--ink);
+  background: var(--color-paper);
+  font-family: var(--font-body);
+  font-size: 10pt;
+  line-height: 1.4;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+#print-sheet h1, #print-sheet h2, #print-sheet h3 { color: var(--ink); }
+#print-sheet ul, #print-sheet ol { list-style: none; }
+
+.print-sheet__page { max-width: 182mm; margin: 0 auto; }
+
+/* header */
+.print-sheet__header {
+  text-align: center;
+  padding-bottom: 6mm;
+  margin-bottom: 6mm;
+  border-bottom: 1.5pt solid var(--gold);
+}
+.print-sheet__star { display: block; margin: 0 auto 2mm; }
+.print-sheet__star path { fill: var(--gold); stroke: var(--ink); stroke-width: 1; stroke-linejoin: round; }
+.print-sheet__title {
+  font-size: 27pt;
+  line-height: 1.1;
+}
+.print-sheet__tagline {
+  margin-top: 1mm;
+  font-family: var(--font-hand);
+  font-weight: 600;
+  font-size: 15pt;
+  color: var(--ink-soft);
+}
+.print-sheet__printed {
+  margin-top: 2mm;
+  font-size: 7.5pt;
+  letter-spacing: 0.16em;
+  color: var(--ink-soft);
+}
+
+/* sections */
+.print-sheet__section { margin-bottom: 6mm; }
+.print-sheet__heading {
+  margin-bottom: 3mm;
+  padding-bottom: 1.2mm;
+  border-bottom: 0.75pt solid var(--rule);
+  font-size: 15pt;
+  break-after: avoid;
+}
+.print-sheet__heading::before {
+  content: '\2726';
+  margin-right: 2mm;
+  font-style: normal;
+  font-size: 11pt;
+  color: var(--ink);
+}
+
+/* the tree: a hand-drawn-feeling outline, nested with a soft guide line */
+.print-sheet__founders { text-align: center; margin-bottom: 3mm; break-after: avoid; }
+.print-sheet__founder-names {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 500;
+  font-size: 15pt;
+}
+.print-sheet__founder-lives { margin-top: 0.5mm; font-size: 9pt; color: var(--ink-soft); }
+.print-sheet__founder-lives .print-sheet__life + .print-sheet__life::before { content: '\00b7'; margin: 0 2mm; }
+
+.print-sheet__tree { margin: 0; padding: 0; }
+.print-sheet__tree .print-sheet__tree {
+  margin: 1.2mm 0 1mm 3mm;
+  padding-left: 4.5mm;
+  border-left: 1pt dotted var(--rule);
+}
+.print-sheet__node { margin: 1.4mm 0; }
+.print-sheet__tree--root > .print-sheet__node { break-inside: avoid; margin-bottom: 3mm; }
+
+.print-sheet__person { display: inline; }
+.print-sheet__name {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 500;
+  font-size: 11.5pt;
+}
+.print-sheet__role, .print-sheet__life {
+  margin-left: 2mm;
+  font-size: 8.5pt;
+  color: var(--ink-soft);
+}
+.print-sheet__role { letter-spacing: 0.1em; text-transform: uppercase; font-size: 7pt; }
+.print-sheet__spouse { display: inline; margin-left: 3mm; }
+.print-sheet__marry { font-family: var(--font-hand); font-weight: 600; font-size: 11pt; color: var(--ink-soft); margin-right: 1.5mm; }
+.print-sheet__spouse .print-sheet__name { font-size: 10.5pt; }
+.print-sheet__also {
+  margin: 3mm 0 1.5mm;
+  font-family: var(--font-hand);
+  font-weight: 600;
+  font-size: 13pt;
+  color: var(--ink-soft);
+}
+
+/* everyone at a glance */
+.print-sheet__table { width: 100%; border-collapse: collapse; font-size: 9pt; }
+.print-sheet__table th, .print-sheet__table td {
+  padding: 0.55mm 2mm 0.55mm 0;
+  text-align: left;
+  font-weight: 400;
+  vertical-align: baseline;
+  border-bottom: 0.5pt solid var(--rule);
+}
+.print-sheet__table thead th {
+  font-size: 7pt;
+  letter-spacing: 0.14em;
+  color: var(--ink-soft);
+  border-bottom: 0.75pt solid var(--ink);
+}
+.print-sheet__table tbody th { font-size: 10pt; }
+.print-sheet__table tr { break-inside: avoid; }
+.print-sheet__table td { color: var(--ink); }
+
+/* postcards: little notes, two to a row */
+.print-sheet__postcards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4mm;
+}
+.print-sheet__postcard {
+  break-inside: avoid;
+  padding: 3mm 4mm;
+  border: 1pt dashed var(--rule);
+  border-radius: 2mm;
+}
+.print-sheet__note {
+  font-family: var(--font-hand);
+  font-weight: 600;
+  font-size: 14pt;
+  line-height: 1.25;
+  quotes: none;
+}
+.print-sheet__cite { margin-top: 1.5mm; font-size: 6.5pt; letter-spacing: 0.12em; color: var(--ink-soft); }
+
+/* moments */
+.print-sheet__moments { display: block; }
+.print-sheet__moment {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 3mm;
+  padding: 1mm 0;
+  border-bottom: 0.5pt dotted var(--rule);
+  break-inside: avoid;
+}
+.print-sheet__when { flex: 0 0 34mm; font-size: 8.5pt; letter-spacing: 0.08em; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+.print-sheet__what { font-family: var(--font-display); font-style: italic; font-weight: 500; font-size: 11pt; }
+.print-sheet__moment-note { font-size: 8.5pt; color: var(--ink-soft); }
+
+/* footer */
+.print-sheet__footer {
+  margin-top: 6mm;
+  padding-top: 4mm;
+  border-top: 1.5pt solid var(--gold);
+  text-align: center;
+  font-family: var(--font-hand);
+  font-weight: 600;
+  font-size: 15pt;
+  color: var(--ink-soft);
+}

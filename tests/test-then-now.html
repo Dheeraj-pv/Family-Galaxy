@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>test: thenNowSlider</title>
+  <link rel="stylesheet" href="../css/tokens.css" />
+  <link rel="stylesheet" href="../css/base.css" />
+  <link rel="stylesheet" href="../css/then-now.css" />
+  <style>
+    body { overflow: auto; padding: 24px; font: 14px/1.5 monospace; }
+    .pass { color: #5eead4; }
+    .fail { color: #fb7185; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h1>thenNowSlider.js</h1>
+  <button id="open" type="button">Open slider (photos missing on purpose)</button>
+  <div id="output">Running…</div>
+
+  <script type="module">
+    import { clampPercent, percentFromPointer, openThenNowSlider } from '../js/profile/thenNowSlider.js';
+
+    const results = [];
+    const check = (label, actual, expected, tol = 0.001) => {
+      const pass = typeof expected === 'number' ? Math.abs(actual - expected) <= tol : actual === expected;
+      results.push({ label, pass, actual, expected });
+    };
+
+    check('clamp below 0', clampPercent(-20), 0);
+    check('clamp above 100', clampPercent(140), 100);
+    check('clamp passthrough', clampPercent(37.5), 37.5);
+
+    const rect = { left: 100, width: 400 };
+    check('pointer at left edge -> 0', percentFromPointer(100, rect), 0);
+    check('pointer at middle -> 50', percentFromPointer(300, rect), 50);
+    check('pointer at right edge -> 100', percentFromPointer(500, rect), 100);
+    check('pointer left of stage clamps to 0', percentFromPointer(20, rect), 0);
+    check('pointer right of stage clamps to 100', percentFromPointer(900, rect), 100);
+    check('zero-width stage falls back to 50', percentFromPointer(10, { left: 0, width: 0 }), 50);
+
+    const passCount = results.filter((r) => r.pass).length;
+    document.getElementById('output').innerHTML =
+      `<p>${passCount} / ${results.length} passed</p><ul>` +
+      results.map((r) => `<li class="${r.pass ? 'pass' : 'fail'}">${r.pass ? '✓' : '✗'} ${r.label}${r.pass ? '' : ` (expected ${r.expected}, got ${r.actual})`}</li>`).join('') +
+      '</ul>';
+
+    document.getElementById('open').addEventListener('click', () =>
+      openThenNowSlider({ then: 'missing_then.jpg', now: 'missing_now.jpg', caption: 'Same laugh, 60 years apart', title: 'Test' }));
+  </script>
+</body>
+</html>

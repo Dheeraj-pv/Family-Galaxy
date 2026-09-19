@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>The Family Galaxy</title>
+  <link rel="stylesheet" href="css/tokens.css" />
+  <link rel="stylesheet" href="css/base.css" />
+  <link rel="stylesheet" href="css/layout.css" />
+  <link rel="stylesheet" href="css/star-map.css" />
+  <link rel="stylesheet" href="css/profile-card.css" />
+  <link rel="stylesheet" href="css/then-now.css" />
+  <link rel="stylesheet" href="css/postcards.css" />
+  <link rel="stylesheet" href="css/timeline.css" />
+  <link rel="stylesheet" href="css/header.css" />
+  <link rel="stylesheet" href="css/events.css" />
+  <link rel="stylesheet" href="css/relationship.css" />
+  <link rel="stylesheet" href="css/greeting.css" />
+  <link rel="stylesheet" href="css/stats.css" />
+  <link rel="stylesheet" href="css/tour.css" />
+  <link rel="stylesheet" href="css/print.css" />
+  <link rel="stylesheet" href="css/a11y.css" />
+</head>
+<body>
+  <!-- App shell is built incrementally per the build order in the plan file.
+       Step 13: header (wordmark, "Find a star" search, Add Postcard, avatar) wired in. -->
+  <a class="skip-link" href="#timeline-container">Skip to the timeline</a>
+  <div id="app-shell">
+    <header id="app-header">
+      <h1 class="visually-hidden">The Family Galaxy</h1>
+      <a class="brand" href="./" aria-label="The Family Galaxy, home">
+        <svg class="brand__icon" viewBox="0 0 24 24" width="26" height="26" aria-hidden="true" focusable="false">
+          <path d="M12 1.5 14.3 9.7 22.5 12 14.3 14.3 12 22.5 9.7 14.3 1.5 12 9.7 9.7Z" />
+        </svg>
+        <span class="brand__name">The Family Galaxy</span>
+      </a>
+      <div class="search" id="star-search">
+        <label class="visually-hidden" for="star-search-input">Find a star</label>
+        <input id="star-search-input" class="search__input" type="search" placeholder="Find a star"
+          autocomplete="off" role="combobox" aria-expanded="false" aria-controls="star-search-list"
+          aria-autocomplete="list" />
+        <ul id="star-search-list" class="search__list" role="listbox" aria-label="Matching family members" hidden></ul>
+      </div>
+      <button type="button" id="add-postcard-btn" class="cta-button" aria-label="Add postcard">
+        <span aria-hidden="true">+</span><span class="cta-button__text"> Add Postcard</span>
+      </button>
+      <button type="button" id="stats-btn" class="header-icon-button" aria-label="Family stats" aria-expanded="false" aria-controls="stats-card"></button>
+      <button type="button" id="my-star-btn" class="avatar-button" aria-label="Go to my star" hidden></button>
+    </header>
+    <main id="star-map-container" aria-label="Family star map">
+      <!-- The canvas is purely visual: its accessible twin is the hidden "Family members" list. -->
+      <canvas id="star-map-canvas" aria-hidden="true"></canvas>
+    </main>
+    <div id="anniversary-banner" hidden></div>
+    <aside id="profile-card" hidden></aside>
+    <aside id="stats-card" hidden></aside>
+    <section id="timeline-container" aria-label="Family timeline" tabindex="-1"></section>
+  </div>
+  <div id="print-sheet" hidden></div>
+  <div id="sr-live" class="visually-hidden" role="status" aria-live="polite" aria-atomic="true"></div>
+    <script type="module" src="js/main.js"></script>
+</body>
+</html>

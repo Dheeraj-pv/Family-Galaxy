@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>test: relations</title>
+  <style>
+    body { background: #0a0e27; color: #f8f5f0; font: 14px/1.5 monospace; padding: 24px; }
+    .pass { color: #5eead4; } .fail { color: #fb7185; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h1>relations.js — relatedIds / describeRelations</h1>
+  <div id="output">Running…</div>
+  <script type="module">
+    import { normalizePerson } from '../js/data/schema.js';
+    import { relatedIds, describeRelations, FOCUS_DIM } from '../js/starmap/relations.js';
+
+    const results = [];
+    const check = (label, actual, expected) => results.push({ label, actual, expected, pass: JSON.stringify(actual) === JSON.stringify(expected) });
+    const raw = await fetch('../data/family.json', { cache: 'no-store' }).then((r) => r.json());
+    const people = raw.people.map(normalizePerson);
+    const sorted = (a) => [...a].sort();
+    const rel = (id) => relatedIds(people, id);
+
+    // Me: parents dad + mom, no spouse, no children
+    const me = rel('me');
+    check('me: self', me.self, ['me']);
+    check('me: parents', sorted(me.parents), ['dad', 'mom']);
+    check('me: no spouses', me.spouses, []);
+    check('me: no children', me.children, []);
+    check('me: no siblings (only child)', me.siblings, []);
+    check('me: all = me + parents', sorted([...me.all]), ['dad', 'me', 'mom']);
+
+    // Dad (planet, married in): spouse mom, child me, no parents in the tree
+    const dad = rel('dad');
+    check('dad: no parents in tree', dad.parents, []);
+    check('dad: spouse is mom', dad.spouses, ['mom']);
+    check('dad: child is me', dad.children, ['me']);
+
+    // Mom: both founders, spouse dad (reverse partnerOf), child me
+    const mom = rel('mom');
+    check('mom: parents are both founders', sorted(mom.parents), ['grandfather', 'grandmother']);
+    check('mom: spouse dad found via his partnerOf', mom.spouses, ['dad']);
+    check('mom: child me', mom.children, ['me']);
+    check('mom: siblings are the other three children of the founders', sorted(mom.siblings), ['aunty1', 'uncle1', 'uncle2']);
+    check('mom: siblings never include herself', mom.siblings.includes('mom'), false);
+    check('mom: all includes siblings', ['uncle1', 'uncle2', 'aunty1'].every((id) => mom.all.has(id)), true);
+    check('mom: a sibling\'s spouse is not lit', mom.all.has('wife-uncle1'), false);
+    check('cousins are siblings of each other', sorted(rel('cousin1').siblings), ['cousin2']);
+    check('dad (married in, no parents) has no siblings', dad.siblings, []);
+
+    // Founders = black hole: both are "self", union of relations
+    const bh = rel('grandfather');
+    check('founder: self is both founders', sorted(bh.self), ['grandfather', 'grandmother']);
+    check('founder: children', sorted(bh.children), ['aunty1', 'mom', 'uncle1', 'uncle2']);
+    check('founder: not each other\'s spouse', bh.spouses, []);
+    check('founder: no parents', bh.parents, []);
+    check('founder: no siblings', bh.siblings, []);
+    check('founder via the other founder gives the same set', sorted([...rel('grandmother').all]), sorted([...bh.all]));
+
+    // Aunty 1 lives on a marriage orbit: her husband is found through his partnerOf
+    check('aunty1: spouse', rel('aunty1').spouses, ['husband-aunty1']);
+    check('aunty1: children are cousin1 + cousin2', sorted(rel('aunty1').children), ['cousin1', 'cousin2']);
+
+    // Synthetic edge cases
+    const loner = [{ id: 'solo', name: 'Solo', parents: [], partnerOf: null }, { id: 'other', name: 'Other', parents: [], partnerOf: null }];
+    const solo = relatedIds(loner, 'solo');
+    check('loner: only self', [...solo.all], ['solo']);
+    check('unknown id -> nothing', relatedIds(loner, 'ghost').all.size, 0);
+    check('a parent id missing from the tree is ignored',
+      relatedIds([{ id: 'kid', parents: ['gone', 'here'], partnerOf: null }, { id: 'here', parents: [] }], 'kid').parents, ['here']);
+    const orphans = [{ id: 'a', parents: ['gone'] }, { id: 'b', parents: ['gone'] }, { id: 'c', parents: ['p1'] }, { id: 'd', parents: ['p1', 'p2'] }, { id: 'p1', parents: [] }, { id: 'p2', parents: [] }];
+    check('a shared parent missing from the tree does not make siblings', relatedIds(orphans, 'a').siblings, []);
+    check('half-siblings (one shared parent) count', relatedIds(orphans, 'c').siblings, ['d']);
+    check('dim constant is a soft fade, not a removal', FOCUS_DIM > 0.15 && FOCUS_DIM < 0.6, true);
+
+    // Announcement sentence
+    check('mom sentence', describeRelations(people, 'mom'), "Highlighting Mom's family: parents Grandfather and Grandmother, siblings Uncle 1, Uncle 2 and Aunty 1, child Me!, spouse Dad.");
+    check('me sentence', describeRelations(people, 'me'), "Highlighting Me!'s family: parents Dad and Mom.");
+    check('founder sentence joins both names', describeRelations(people, 'grandfather').startsWith("Highlighting Grandfather and Grandmother's family: children "), true);
+    check('loner sentence', describeRelations(loner, 'solo'), 'Highlighting Solo: no relatives in the tree.');
+    check('unknown person -> empty sentence', describeRelations(loner, 'ghost'), '');
+
+    const passCount = results.filter((r) => r.pass).length;
+    document.getElementById('output').innerHTML =
+      `<p>${passCount} / ${results.length} passed</p><ul>` +
+      results.map((r) => `<li class="${r.pass ? 'pass' : 'fail'}">${r.pass ? '✓' : '✗'} ${r.label}${r.pass ? '' : ` (expected ${JSON.stringify(r.expected)}, got ${JSON.stringify(r.actual)})`}</li>`).join('') +
+      '</ul>';
+  </script>
+</body>
+</html>

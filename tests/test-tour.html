@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>test: first-visit tour</title>
+  <style>
+    body { background: #0a0e27; color: #f8f5f0; font: 14px/1.5 monospace; padding: 24px; }
+    .pass { color: #5eead4; } .fail { color: #fb7185; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h1>tourSteps.js — script + placement assertions</h1>
+  <div id="output">Running…</div>
+
+  <script type="module">
+    import {
+      TOUR_STEPS, clampIndex, nextIndex, prevIndex, isLastStep, progressLabel, playableSteps,
+      shouldAutoStart, overlapArea, placeCoach,
+    } from '../js/tour/tourSteps.js';
+
+    const results = [];
+    const check = (label, actual, expected) => results.push({ label, actual, expected, pass: JSON.stringify(actual) === JSON.stringify(expected) });
+    const ok = (label, condition) => check(label, !!condition, true);
+
+    // --- the script ---
+    ok('there are 5-7 steps (a gentle tour, not a lecture)', TOUR_STEPS.length >= 5 && TOUR_STEPS.length <= 7);
+    check('step ids are unique', new Set(TOUR_STEPS.map((s) => s.id)).size, TOUR_STEPS.length);
+    ok('every step has a title and a body', TOUR_STEPS.every((s) => s.title && s.body));
+    ok('every anchored step names a selector string', TOUR_STEPS.every((s) => s.selector === null || typeof s.selector === 'string'));
+    check('the first step is the un-anchored welcome', [TOUR_STEPS[0].id, TOUR_STEPS[0].selector], ['welcome', null]);
+    ok('exactly one step waits for a star to be clicked', TOUR_STEPS.filter((s) => s.advanceOn === 'starSelected').length === 1);
+    ok('the star step has no ring (the whole sky is its anchor)', TOUR_STEPS.find((s) => s.advanceOn).ring === false);
+    ok('every preferred side is one we can place', TOUR_STEPS.every((s) => ['above', 'below', 'left', 'right', 'top', 'bottom'].includes(s.prefer)));
+
+    // --- stepping ---
+    check('clamp keeps an index in range', [clampIndex(-3, 5), clampIndex(2, 5), clampIndex(9, 5)], [0, 2, 4]);
+    check('an empty tour clamps to 0', clampIndex(3, 0), 0);
+    check('next stops at the last step', [nextIndex(0, 3), nextIndex(2, 3), nextIndex(9, 3)], [1, 2, 2]);
+    check('prev stops at the first step', [prevIndex(2, 3), prevIndex(0, 3), prevIndex(-4, 3)], [1, 0, 0]);
+    check('isLastStep', [isLastStep(1, 3), isLastStep(2, 3), isLastStep(5, 3)], [false, true, true]);
+    check('progress label reads "2 of 6"', progressLabel(1, 6), '2 of 6');
+    check('progress label clamps', [progressLabel(-1, 4), progressLabel(99, 4)], ['1 of 4', '4 of 4']);
+
+    // --- skipping steps whose anchor is missing ---
+    const present = new Set(['#a', '#c']);
+    const sample = [{ id: 'w', selector: null }, { id: 'a', selector: '#a' }, { id: 'b', selector: '#b' }, { id: 'c', selector: '#c' }];
+    check('steps with no anchor on the page are dropped; the welcome stays', playableSteps(sample, (sel) => present.has(sel)).map((s) => s.id), ['w', 'a', 'c']);
+    check('nothing anchored is left when nothing is on the page', playableSteps(sample, () => false).map((s) => s.id), ['w']);
+
+    // --- when to offer it ---
+    check('first visit offers the tour', shouldAutoStart({ seen: false, forced: false }), true);
+    check('a seen tour is not offered again', shouldAutoStart({ seen: true, forced: false }), false);
+    check('?tour=1 forces it even when seen', shouldAutoStart({ seen: true, forced: true }), true);
+
+    // --- rect overlap ---
+    check('overlapping rects', overlapArea({ left: 0, top: 0, width: 10, height: 10 }, { left: 5, top: 5, width: 10, height: 10 }), 25);
+    check('touching rects do not overlap', overlapArea({ left: 0, top: 0, width: 10, height: 10 }, { left: 10, top: 0, width: 10, height: 10 }), 0);
+    check('far rects do not overlap', overlapArea({ left: 0, top: 0, width: 10, height: 10 }, { left: 50, top: 50, width: 5, height: 5 }), 0);
+
+    // --- placement ---
+    const vp = { width: 1456, height: 820 };
+    const card = { width: 320, height: 210 };
+    const header = { left: 0, top: 0, width: 1456, height: 64 };
+    const ribbon = { left: 0, top: 700, width: 1456, height: 120 };
+    const inside = (spot, v = vp, c = card, m = 12) =>
+      spot.left >= m && spot.top >= m && spot.left + Math.min(c.width, v.width - 2 * m) <= v.width - m + 0.5 && spot.top + Math.min(c.height, v.height - 2 * m) <= v.height - m + 0.5;
+    const rectOfSpot = (spot, c = card) => ({ left: spot.left, top: spot.top, width: c.width, height: c.height });
+
+    // A small mid-screen anchor: the preferred side wins when free.
+    const mid = { left: 600, top: 400, width: 100, height: 40 };
+    check('prefers "below" when free', placeCoach({ anchor: mid, viewport: vp, card, prefer: 'below' }).placement, 'below');
+    check('prefers "above" when free', placeCoach({ anchor: mid, viewport: vp, card, prefer: 'above' }).placement, 'above');
+    const below = placeCoach({ anchor: mid, viewport: vp, card, prefer: 'below' });
+    check('below: centred under the anchor, a gap away', [below.left, below.top], [Math.round(650 - 160), 400 + 40 + 14]);
+    ok('below: does not cover the anchor', overlapArea(rectOfSpot(below), mid) === 0);
+
+    // Preferred side blocked by an obstacle -> falls to the opposite side.
+    const blockedBelow = placeCoach({ anchor: mid, viewport: vp, card, prefer: 'below', obstacles: [{ left: 400, top: 440, width: 600, height: 400 }] });
+    check('falls back to above when below is taken', blockedBelow.placement, 'above');
+    ok('and does not touch the obstacle', overlapArea(rectOfSpot(blockedBelow), { left: 400, top: 440, width: 600, height: 400 }) === 0);
+
+    // Header anchor: the header itself must not push the card away from the button inside it.
+    const addBtn = { left: 1216, top: 12, width: 122, height: 40 };
+    const underBtn = placeCoach({ anchor: addBtn, viewport: vp, card, obstacles: [header, ribbon], prefer: 'below' });
+    check('a button in the header gets its card below it', underBtn.placement, 'below');
+    ok('...and the card stays on screen', inside(underBtn));
+    check('...just beyond the header\'s edge (gap 14), so it never overlaps the bar', underBtn.top, 64 + 14);
+    ok('...and the header is not overlapped', overlapArea(rectOfSpot(underBtn), header) === 0);
+    ok('...clear of the button', overlapArea(rectOfSpot(underBtn), addBtn) === 0);
+
+    // Ribbon anchor with the profile card open bottom-centre: slide along the edge instead.
+    const play = { left: 112, top: 745, width: 30, height: 30 };
+    const axis = { left: 180, top: 728, width: 1260, height: 80 };
+    const profileCard = { left: 518, top: 300, width: 420, height: 400 };
+    const abovePlay = placeCoach({ anchor: play, viewport: vp, card, obstacles: [header, ribbon, profileCard], prefer: 'above' });
+    check('play button: card above it', abovePlay.placement, 'above');
+    ok('play button: card clear of the profile card', overlapArea(rectOfSpot(abovePlay), profileCard) === 0);
+    const aboveAxis = placeCoach({ anchor: axis, viewport: vp, card, obstacles: [header, ribbon, profileCard], prefer: 'above' });
+    ok('timeline: card above the axis', aboveAxis.placement === 'above' && aboveAxis.top + card.height <= axis.top);
+    ok('timeline: slides along the edge to dodge the open profile card', overlapArea(rectOfSpot(aboveAxis), profileCard) === 0);
+    ok('timeline: still on screen', inside(aboveAxis));
+
+    // Always inside the viewport, wherever the anchor is.
+    const anchors = [
+      { left: 0, top: 0, width: 20, height: 20 }, { left: 1436, top: 0, width: 20, height: 20 },
+      { left: 0, top: 800, width: 20, height: 20 }, { left: 1436, top: 800, width: 20, height: 20 },
+      { left: 700, top: 0, width: 50, height: 30 }, { left: 700, top: 790, width: 50, height: 30 },
+    ];
+    ok('the card never leaves the viewport (6 corner/edge anchors x 4 preferences)', anchors.every((a) =>
+      ['above', 'below', 'left', 'right'].every((prefer) => inside(placeCoach({ anchor: a, viewport: vp, card, prefer })))));
+
+    // The whole sky as anchor / no anchor: a free spot in the field between header and ribbon.
+    const field = { left: 0, top: 64, width: 1456, height: 636 };
+    const sky = { left: 0, top: 64, width: 1456, height: 636 };
+    const welcome = placeCoach({ anchor: null, viewport: vp, card, obstacles: [header, ribbon], field, prefer: 'top' });
+    check('welcome: sits at the top of the open sky, centred', [welcome.placement, welcome.left], ['top', Math.round((1456 - 320) / 2)]);
+    ok('welcome: below the header', welcome.top >= 64);
+    const pill = { left: 540, top: 74, width: 376, height: 34 };
+    const welcomeWithPill = placeCoach({ anchor: null, viewport: vp, card, obstacles: [header, ribbon, pill], field, prefer: 'top' });
+    ok('welcome: never lands on the greeting pill', overlapArea(rectOfSpot(welcomeWithPill), pill) === 0);
+    const starsStep = placeCoach({ anchor: sky, viewport: vp, card, obstacles: [header, ribbon], field, prefer: 'left' });
+    check('stars step: to the left of the sky, out of the tree', [starsStep.placement, starsStep.left], ['left', 12]);
+    ok('stars step: inside the field', starsStep.top >= 64 && starsStep.top + card.height <= 700);
+    const starsWithCard = placeCoach({ anchor: sky, viewport: vp, card, obstacles: [header, ribbon, profileCard], field, prefer: 'left' });
+    ok('with a profile card open the sky spot still avoids it', overlapArea(rectOfSpot(starsWithCard), profileCard) === 0);
+
+    // A phone: 360x640, card shrinks to the width.
+    const phone = { width: 360, height: 640 };
+    const phoneCard = { width: 320, height: 240 };
+    const phoneHeader = { left: 0, top: 0, width: 360, height: 64 };
+    const phoneRibbon = { left: 0, top: 580, width: 360, height: 60 };
+    const phonePlay = { left: 62, top: 597, width: 26, height: 26 };
+    const phoneSpot = placeCoach({ anchor: phonePlay, viewport: phone, card: phoneCard, obstacles: [phoneHeader, phoneRibbon], prefer: 'above' });
+    check('phone: the ribbon step puts the card above the ribbon', phoneSpot.placement, 'above');
+    ok('phone: on screen', inside(phoneSpot, phone, phoneCard));
+    ok('phone: clear of the ribbon', overlapArea(rectOfSpot(phoneSpot, phoneCard), phoneRibbon) === 0);
+    ok('phone: clear of the Play button', overlapArea(rectOfSpot(phoneSpot, phoneCard), phonePlay) === 0);
+    const tiny = placeCoach({ anchor: { left: 100, top: 300, width: 40, height: 40 }, viewport: { width: 300, height: 500 }, card: { width: 320, height: 240 }, prefer: 'below' });
+    ok('a card wider than the screen is squeezed to fit (left edge at the margin)', tiny.left === 12);
+
+    // Anchor bigger than 35% of the viewport counts as "the sky" — no side to sit beside.
+    const huge = placeCoach({ anchor: { left: 0, top: 0, width: 1456, height: 700 }, viewport: vp, card, prefer: 'bottom', field });
+    ok('a huge anchor never pushes the card off screen', inside(huge));
+
+    const passCount = results.filter((r) => r.pass).length;
+    document.getElementById('output').innerHTML =
+      `<p>${passCount} / ${results.length} passed</p><ul>` +
+      results.map((r) => `<li class="${r.pass ? 'pass' : 'fail'}">${r.pass ? '✓' : '✗'} ${r.label}${r.pass ? '' : ` (expected ${JSON.stringify(r.expected)}, got ${JSON.stringify(r.actual)})`}</li>`).join('') +
+      '</ul>';
+  </script>
+</body>
+</html>

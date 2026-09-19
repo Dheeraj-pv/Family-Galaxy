@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>test: kinship</title>
+  <style>
+    body { background: #0a0e27; color: #f8f5f0; font: 14px/1.5 monospace; padding: 24px; }
+    .pass { color: #5eead4; } .fail { color: #fb7185; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h1>kinship.js — findRelationship / bloodLabel</h1>
+  <div id="output">Running…</div>
+  <script type="module">
+    import { normalizePerson } from '../js/data/schema.js';
+    import { findRelationship, bloodLabel } from '../js/relationship/kinship.js';
+
+    const results = [];
+    const check = (label, actual, expected) => results.push({ label, actual, expected, pass: JSON.stringify(actual) === JSON.stringify(expected) });
+    const raw = await fetch('../data/family.json', { cache: 'no-store' }).then((r) => r.json());
+    const people = raw.people.map(normalizePerson);
+    const rel = (a, b, o) => findRelationship(people, a, b, o);
+    const sorted = (a) => [...a].sort();
+
+    // ---- the reference family ----
+    const cousins = rel('me', 'cousin3');
+    check('me/cousin3: first cousins, through the founders',
+      cousins.sentence, 'Cousin 3 is Me!\'s first cousin, through Grandfather & Grandmother.');
+    check('me/cousin3: kind is blood', cousins.kind, 'blood');
+    check('me/cousin3: path is the whole chain (both founders lit)',
+      sorted(cousins.path), sorted(['me', 'mom', 'grandfather', 'grandmother', 'uncle1', 'cousin3']));
+    check('me/cousin3: path runs me -> ... -> cousin3', [cousins.path[0], cousins.path[cousins.path.length - 1]], ['me', 'cousin3']);
+
+    check('me/uncle1: aunt or uncle', rel('me', 'uncle1').label, 'aunt or uncle');
+    check('me/aunty1: aunt or uncle', rel('me', 'aunty1').label, 'aunt or uncle');
+    const gm = rel('me', 'grandmother');
+    check('me/grandmother: grandparent, no "through"', gm.sentence, 'Grandmother is Me!\'s grandparent.');
+    check('me/grandmother: path lights the whole black hole', sorted(gm.path), ['grandfather', 'grandmother', 'me', 'mom']);
+    check('me/dad: parent', rel('me', 'dad').sentence, 'Dad is Me!\'s parent.');
+    check('me/dad: path is just the two of them', sorted(rel('me', 'dad').path), ['dad', 'me']);
+    check('dad/me: child', rel('dad', 'me').label, 'child');
+    check('mom/uncle2: sibling', rel('mom', 'uncle2').sentence, 'Uncle 2 is Mom\'s sibling, through Grandfather & Grandmother.');
+    check('mom/dad: spouse', rel('mom', 'dad').sentence, 'Dad is Mom\'s spouse.');
+    check('dad/mom: spouse (the other direction)', rel('dad', 'mom').kind, 'spouse');
+    check('grandfather/grandmother: spouses', rel('grandfather', 'grandmother').kind, 'spouse');
+
+    const auntByMarriage = rel('me', 'wife-uncle1');
+    check('me/wife-uncle1: aunt or uncle by marriage', auntByMarriage.sentence, 'Wife-Uncle1 is Me!\'s aunt or uncle by marriage, through Uncle 1.');
+    check('me/wife-uncle1: kind marriage', auntByMarriage.kind, 'marriage');
+    check('me/wife-uncle1: path me -> mom -> founders -> uncle1 -> wife-uncle1',
+      sorted(auntByMarriage.path), sorted(['me', 'mom', 'grandfather', 'grandmother', 'uncle1', 'wife-uncle1']));
+    check('me/husband-aunty1: aunt or uncle by marriage', rel('me', 'husband-aunty1').label, 'aunt or uncle by marriage');
+
+    const c15 = rel('cousin1', 'cousin5');
+    check('cousin1/cousin5: first cousins via different couples', c15.label, 'first cousin');
+    check('cousin1/cousin5: through the founders', c15.through, ['grandfather', 'grandmother']);
+    check('cousin1/cousin5: path includes both parents\' lines',
+      sorted(c15.path), sorted(['cousin1', 'aunty1', 'grandfather', 'grandmother', 'uncle2', 'cousin5']));
+    check('cousin1/cousin2: siblings through their parents (both listed)', rel('cousin1', 'cousin2').sentence,
+      'Cousin 2 is Cousin 1\'s sibling, through Husband-Aunty1 & Aunty 1.');
+
+    const n1 = rel('nephew1', 'me');
+    check('nephew1/me: first cousin once removed', n1.label, 'first cousin once removed');
+    check('me/nephew1: same the other way round', rel('me', 'nephew1').label, 'first cousin once removed');
+    check('mom/cousin3: niece or nephew', rel('mom', 'cousin3').label, 'niece or nephew');
+    check('cousin3/mom: aunt or uncle', rel('cousin3', 'mom').label, 'aunt or uncle');
+    check('mom/nephew1: great-niece or great-nephew', rel('mom', 'nephew1').label, 'great-niece or great-nephew');
+    check('me/c1-hus: first cousin\'s spouse', rel('me', 'c1-hus').label, 'first cousin\'s spouse');
+    check('me/c3-wife: first cousin\'s spouse', rel('me', 'c3-wife').label, 'first cousin\'s spouse');
+    check('wife-uncle1/c3-wife: child\'s spouse', rel('wife-uncle1', 'c3-wife').label, 'child\'s spouse');
+    check('dad/uncle1: spouse\'s sibling', rel('dad', 'uncle1').sentence, 'Uncle 1 is Dad\'s spouse\'s sibling, through Mom.');
+    check('dad/grandfather: spouse\'s parent', rel('dad', 'grandfather').label, 'spouse\'s parent');
+    check('dad/c1-hus: relative by marriage (both sides marry in)', rel('dad', 'c1-hus').label, 'relative by marriage');
+    check('dad/c1-hus: path runs through both spouses', ['dad', 'mom', 'cousin1', 'c1-hus'].every((id) => rel('dad', 'c1-hus').path.includes(id)), true);
+
+    // founder card: the couple speaks as one
+    const asCouple = rel('grandfather', 'me', { ownerName: 'Grandfather & Grandmother' });
+    check('founder card sentence uses both names', asCouple.sentence, 'Me! is Grandfather & Grandmother\'s grandchild.');
+    check('founder card: path covers the black hole', ['grandfather', 'grandmother', 'mom', 'me'].every((id) => asCouple.path.includes(id)), true);
+
+    // ---- self / unknown ----
+    check('self is its own answer', rel('me', 'me').kind, 'self');
+    check('self path is just the person', rel('me', 'me').path, ['me']);
+    check('unknown person -> empty', rel('me', 'ghost').path, []);
+
+    // ---- synthetic trees ----
+    const P = (id, parents = [], partnerOf = null, extra = {}) => normalizePerson({ id, name: id.toUpperCase(), role: 'blood', parents, partnerOf, generation: 0, ...extra });
+    const tree = [
+      P('gg'), P('g', ['gg']), P('a', ['g']), P('b', ['g']),
+      P('a1', ['a']), P('b1', ['b']), P('a2', ['a1']), P('b2', ['b1']), // second cousins: a2/b2
+      P('h1', ['p1']), P('h2', ['p1', 'p2']), P('p1'), P('p2'),          // half-siblings h1/h2 (only h2 lists p2)
+      P('t1', ['p1']), P('t2', ['p1']),                                   // true siblings (same single parent)
+      P('loner'), P('other'),
+    ];
+    const s = (x, y) => findRelationship(tree, x, y);
+    check('second cousins', s('a2', 'b2').label, 'second cousin');
+    check('second cousins: path is the long chain', s('a2', 'b2').path, ['a2', 'a1', 'a', 'g', 'b', 'b1', 'b2']);
+    check('first cousin once removed (synthetic)', s('a2', 'b1').label, 'first cousin once removed');
+    check('great-aunt or great-uncle (synthetic)', s('a2', 'b').label, 'great-aunt or great-uncle');
+    check('great-grandparent', s('a2', 'g').label, 'great-grandparent');
+    check('great-great-grandparent', s('a2', 'gg').label, 'great-great-grandparent');
+    check('great-grandchild', s('g', 'a2').label, 'great-grandchild');
+    check('half-sibling', s('h1', 'h2').label, 'half-sibling');
+    check('siblings sharing the only listed parent are plain siblings', s('t1', 't2').label, 'sibling');
+    check('unrelated people', s('loner', 'other').kind, 'none');
+    check('unrelated sentence is warm', s('loner', 'other').sentence, 'No connection in this tree yet.');
+    check('unrelated path is empty (nothing to light)', s('loner', 'other').path, []);
+
+    // ---- label table (pure) ----
+    const L = (up, down, half) => bloodLabel({ up, down, half });
+    check('label: child', L(0, 1), 'child');
+    check('label: grandchild', L(0, 2), 'grandchild');
+    check('label: parent', L(1, 0), 'parent');
+    check('label: sibling', L(1, 1), 'sibling');
+    check('label: niece or nephew', L(1, 2), 'niece or nephew');
+    check('label: great-aunt or great-uncle', L(3, 1), 'great-aunt or great-uncle');
+    check('label: second cousin twice removed', L(5, 3), 'second cousin twice removed');
+    check('label: third cousin once removed', L(5, 4), 'third cousin once removed');
+    check('label: 3 times removed', L(2, 5), 'first cousin 3 times removed');
+
+    const passCount = results.filter((r) => r.pass).length;
+    document.getElementById('output').innerHTML =
+      `<p>${passCount} / ${results.length} passed</p><ul>` +
+      results.map((r) => `<li class="${r.pass ? 'pass' : 'fail'}">${r.pass ? '✓' : '✗'} ${r.label}${r.pass ? '' : ` (expected ${JSON.stringify(r.expected)}, got ${JSON.stringify(r.actual)})`}</li>`).join('') +
+      '</ul>';
+  </script>
+</body>
+</html>

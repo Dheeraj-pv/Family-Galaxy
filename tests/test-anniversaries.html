@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>test: anniversaries</title>
+  <style>
+    body { background: #0a0e27; color: #f8f5f0; font: 14px/1.5 monospace; padding: 24px; }
+    .pass { color: #5eead4; } .fail { color: #fb7185; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h1>anniversaries.js — greeting logic assertions</h1>
+  <div id="output">Running…</div>
+
+  <script type="module">
+    import { upcomingCelebrations, parseIsoDate, parseBirthday, nextOccurrence, toIso, civilFromDate, moreLabel } from '../js/greeting/anniversaries.js';
+
+    const results = [];
+    const check = (label, actual, expected) => results.push({ label, actual, expected, pass: JSON.stringify(actual) === JSON.stringify(expected) });
+
+    // --- date helpers ---
+    check('parses a valid ISO date', parseIsoDate('2026-09-18'), { year: 2026, month: 9, day: 18 });
+    check('rejects Feb 30', parseIsoDate('2026-02-30'), null);
+    check('rejects Feb 29 in a non-leap year', parseIsoDate('2025-02-29'), null);
+    check('accepts Feb 29 in a leap year', parseIsoDate('2024-02-29'), { year: 2024, month: 2, day: 29 });
+    check('rejects 1900-02-29 (century, not leap)', parseIsoDate('1900-02-29'), null);
+    check('accepts 2000-02-29 (leap century)', parseIsoDate('2000-02-29') !== null, true);
+    check('rejects non-ISO text', parseIsoDate('18/09/2026'), null);
+    check('rejects null', parseIsoDate(null), null);
+    check('toIso pads', toIso({ year: 2026, month: 3, day: 4 }), '2026-03-04');
+    check('civilFromDate uses local fields', civilFromDate(new Date(2026, 8, 18)), { year: 2026, month: 9, day: 18 });
+    check('birthday MM-DD parses', parseBirthday('09-20'), { month: 9, day: 20 });
+    check('birthday allows 02-29', parseBirthday('02-29'), { month: 2, day: 29 });
+    check('birthday rejects 02-30', parseBirthday('02-30'), null);
+    check('birthday rejects 13-01', parseBirthday('13-01'), null);
+    check('birthday rejects junk / null', [parseBirthday('9-20'), parseBirthday(null), parseBirthday('')], [null, null, null]);
+
+    const today = { year: 2026, month: 9, day: 18 };
+    check('nextOccurrence: later this year', nextOccurrence(9, 20, today), { date: { year: 2026, month: 9, day: 20 }, daysAway: 2 });
+    check('nextOccurrence: today counts as 0', nextOccurrence(9, 18, today).daysAway, 0);
+    check('nextOccurrence: passed -> next year', nextOccurrence(9, 17, today), { date: { year: 2027, month: 9, day: 17 }, daysAway: 364 });
+    check('nextOccurrence: Dec -> Jan wraps the year', nextOccurrence(1, 2, { year: 2026, month: 12, day: 30 }), { date: { year: 2027, month: 1, day: 2 }, daysAway: 3 });
+    check('nextOccurrence: Feb 29 lands on Feb 28 in a non-leap year', nextOccurrence(2, 29, { year: 2026, month: 2, day: 20 }).date, { year: 2026, month: 2, day: 28 });
+    check('nextOccurrence: Feb 29 is real in a leap year', nextOccurrence(2, 29, { year: 2028, month: 2, day: 20 }).date, { year: 2028, month: 2, day: 29 });
+    check('nextOccurrence: Feb 29 after Feb 28 this (non-leap) year goes to next year\'s Feb 28', nextOccurrence(2, 29, { year: 2026, month: 3, day: 1 }).date, { year: 2027, month: 2, day: 28 });
+
+    // --- a small family ---
+    const people = [
+      { id: 'mom', name: 'Mom', birth: 1966, death: null, birthday: '09-20' },
+      { id: 'me', name: 'Me!', birth: 1991, death: null, birthday: '09-19' },
+      { id: 'grandfather', name: 'Grandfather', birth: 1938, death: 2012, birthday: '09-21' },
+      { id: 'drift', name: 'Drift', birth: null, death: null, birthday: '09-22' },
+      { id: 'leap', name: 'Leapling', birth: 2000, death: null, birthday: '02-29' },
+      { id: 'nobday', name: 'NoBirthday', birth: 1970, death: null, birthday: null },
+      { id: 'baby', name: 'Baby', birth: 2026, death: null, birthday: '09-19' },
+      { id: 'bad', name: 'Bad', birth: 1970, death: null, birthday: '02-30' },
+    ];
+    const events = [
+      { year: 1962, month: 9, day: 24, personId: 'grandmother', label: 'Wedding' },
+      { year: 1966, month: 9, day: 20, personId: 'mom', label: 'Mom born' },
+      { year: 1989, month: null, day: null, personId: 'mom', label: 'Married Dad' },
+      { year: 1989, month: 9, day: 25, personId: 'mom', label: 'Married Dad' },
+      { year: 2030, month: 9, day: 19, personId: null, label: 'Future thing' },
+      { year: 2026, month: 9, day: 19, personId: null, label: 'This year' },
+      { year: null, month: 9, day: 19, personId: null, label: 'Undated year' },
+    ];
+
+    const all = upcomingCelebrations(people, events, '2026-09-18', { windowDays: 7 });
+    const texts = all.map((c) => c.text);
+    check('sorted soonest first', all.map((c) => c.daysAway), [1, 1, 2, 3, 4, 6, 7]);
+    check('self is greeted as "your" and comes first tomorrow (birthday before event)', texts[0], 'Your birthday is tomorrow · turning 35');
+    check('mom in 2 days with her age', texts.find((t) => t.startsWith("Mom's")), "Mom's birthday is in 2 days · turning 60");
+    check('the "Mom born" event echoing her birthday is dropped', all.filter((c) => c.kind === 'event' && c.personId === 'mom' && c.daysAway === 2).length, 0);
+    check('deceased: remembrance wording, would have turned', texts.find((t) => t.startsWith("Grandfather's")), "Grandfather's birthday is in 3 days · would have turned 88");
+    check('deceased flagged as remembering', all.find((c) => c.personId === 'grandfather').remembering, true);
+    check('unknown birth year: no age, no crash', texts.find((t) => t.startsWith("Drift's")), "Drift's birthday is in 4 days");
+    check('unknown birth year: no age field', 'age' in all.find((c) => c.personId === 'drift'), false);
+    check('wedding anniversary with years', texts.find((t) => t.startsWith('Wedding')), 'Wedding anniversary is in 6 days · 64 years');
+    check('other events use the quoted form', texts.find((t) => t.includes('Married Dad')), 'Anniversary of “Married Dad” is in 7 days · 37 years');
+    check('year-only event skipped', all.some((c) => c.label.includes('Married Dad') && c.daysAway !== 7), false);
+    check('future-dated event skipped', all.some((c) => c.label.includes('Future thing')), false);
+    check('event in the current year is not yet an anniversary', all.some((c) => c.label.includes('This year')), false);
+    check('event with no year still greets (no years suffix)', upcomingCelebrations([], [{ year: null, month: 9, day: 19, label: 'Picnic' }], '2026-09-18')[0].text, 'Anniversary of “Picnic” is tomorrow');
+    check('baby born this year has no birthday yet', all.some((c) => c.personId === 'baby'), false);
+    check('invalid birthday (02-30) ignored', all.some((c) => c.personId === 'bad'), false);
+    check('null birthday ignored', all.some((c) => c.personId === 'nobday'), false);
+
+    // --- window ---
+    check('window of 1 day: only tomorrow\'s', upcomingCelebrations(people, events, '2026-09-18', { windowDays: 1 }).map((c) => c.daysAway), [1, 1]);
+    check('window of 0 with nothing today is empty', upcomingCelebrations(people, events, '2026-09-18', { windowDays: 0 }), []);
+    check('default window is 7 days', upcomingCelebrations(people, events, '2026-09-18').length, all.length);
+    check('quiet day -> empty list', upcomingCelebrations(people, events, '2026-01-10'), []);
+
+    // --- today / tomorrow wording ---
+    const todayMom = upcomingCelebrations(people, events, '2026-09-20')[0];
+    check('today: "Today is X\'s birthday"', todayMom.text, "Today is Mom's birthday · turning 60");
+    check('today: daysAway 0', todayMom.daysAway, 0);
+    check('today for self', upcomingCelebrations(people, [], '2026-09-19').find((c) => c.personId === 'me').text, 'Today is your birthday · turning 35');
+    check('today for the deceased: "Today we remember"', upcomingCelebrations(people, [], '2026-09-21')[0].text, 'Today we remember Grandfather · would have turned 88');
+    check('tomorrow wording', upcomingCelebrations([people[0]], [], '2026-09-19')[0].text, "Mom's birthday is tomorrow · turning 60");
+
+    // --- year wrap and leap day ---
+    check('Dec 30 sees a Jan 2 birthday (year wrap), age counts the new year',
+      upcomingCelebrations([{ id: 'x', name: 'Xan', birth: 2000, death: null, birthday: '01-02' }], [], '2026-12-30')[0].text, "Xan's birthday is in 3 days · turning 27");
+    check('leapling on Feb 28 in a non-leap year celebrates that day', upcomingCelebrations(people, [], '2026-02-28').find((c) => c.personId === 'leap').text, "Today is Leapling's birthday · turning 26");
+    check('leapling on a real leap day', upcomingCelebrations(people, [], '2028-02-29').find((c) => c.personId === 'leap').daysAway, 0);
+    check('leapling seen a few days ahead', upcomingCelebrations(people, [], '2026-02-25').find((c) => c.personId === 'leap').daysAway, 3);
+    check('death in the same year as the birthday is still a plain greeting',
+      upcomingCelebrations([{ id: 'd', name: 'Dee', birth: 1950, death: 2026, birthday: '09-20' }], [], '2026-09-18')[0].remembering, false);
+    check('death the year before is remembrance',
+      upcomingCelebrations([{ id: 'd', name: 'Dee', birth: 1950, death: 2025, birthday: '09-20' }], [], '2026-09-18')[0].remembering, true);
+    check('a wedding anniversary that is one year old says "1 year"', upcomingCelebrations([], [{ year: 2025, month: 9, day: 19, label: 'Wedding' }], '2026-09-18')[0].text, 'Wedding anniversary is tomorrow · 1 year');
+
+    // --- inputs ---
+    check('accepts a Date for today', upcomingCelebrations([people[0]], [], new Date(2026, 8, 18)).length, 1);
+    check('accepts a civil-date object for today', upcomingCelebrations([people[0]], [], { year: 2026, month: 9, day: 18 }).length, 1);
+    check('garbage today -> nothing, no crash', upcomingCelebrations(people, events, 'nonsense'), []);
+    check('every item has an icon and kind', all.every((c) => c.icon && (c.kind === 'birthday' || c.kind === 'event')), true);
+    check('more label', [moreLabel(1), moreLabel(2)], ['and 1 more', 'and 2 more']);
+
+    // --- the real family.json ---
+    const data = await fetch('../data/family.json', { cache: 'no-store' }).then((r) => r.json());
+    check('every person in family.json has a valid birthday', data.people.every((p) => parseBirthday(p.birthday) !== null), true);
+    check('every event in family.json has a valid month/day', data.events.every((e) => Number.isInteger(e.month) && Number.isInteger(e.day)), true);
+    check('Mom\'s born-event matches her birthday', (() => {
+      const mom = data.people.find((p) => p.id === 'mom'); const ev = data.events.find((e) => e.label === 'Mom born');
+      return mom.birthday === `${String(ev.month).padStart(2, '0')}-${String(ev.day).padStart(2, '0')}`;
+    })(), true);
+    check('Me!\'s born-event matches their birthday', (() => {
+      const me = data.people.find((p) => p.id === 'me'); const ev = data.events.find((e) => e.label === 'Me! born');
+      return me.birthday === `${String(ev.month).padStart(2, '0')}-${String(ev.day).padStart(2, '0')}`;
+    })(), true);
+    check('placeholder: Mom\'s birthday is two days after 2026-09-18',
+      upcomingCelebrations(data.people, data.events, '2026-09-18').some((c) => c.personId === 'mom' && c.daysAway === 2), true);
+    check('Grandfather\'s birthday is remembered (deceased, 03-14)',
+      upcomingCelebrations(data.people, data.events, '2026-03-14')[0].text, 'Today we remember Grandfather · would have turned 88');
+
+    const passCount = results.filter((r) => r.pass).length;
+    document.getElementById('output').innerHTML =
+      `<p>${passCount} / ${results.length} passed</p><ul>` +
+      results.map((r) => `<li class="${r.pass ? 'pass' : 'fail'}">${r.pass ? '✓' : '✗'} ${r.label}${r.pass ? '' : ` (expected ${JSON.stringify(r.expected)}, got ${JSON.stringify(r.actual)})`}</li>`).join('') +
+      '</ul>';
+  </script>
+</body>
+</html>

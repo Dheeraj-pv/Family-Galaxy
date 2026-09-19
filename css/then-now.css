@@ -1,0 +1,189 @@
+/* Then & Now slider modal. Mounted on <body> (above the app shell's stacking context).
+   Entrance reuses the profile card's documented timing tokens — the mockup's motion table has no
+   separate row for this modal. */
+
+.then-now {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  opacity: 0;
+  transition: opacity var(--duration-card-entrance) ease-out;
+}
+.then-now.is-open { opacity: 1; }
+
+.then-now__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(10, 14, 39, 0.82);
+}
+
+.then-now__panel {
+  position: relative;
+  width: min(760px, 100%);
+  padding: 16px 16px 20px;
+  border-radius: 20px;
+  background: rgba(26, 31, 58, 0.96);
+  border: 1px solid rgba(255, 216, 155, 0.25);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.55), 0 0 40px rgba(255, 216, 155, 0.08);
+  transform: scale(0.96);
+  transition: transform var(--duration-card-entrance) var(--ease-overshoot);
+}
+.then-now.is-open .then-now__panel { transform: scale(1); }
+
+.then-now__close {
+  position: absolute;
+  top: -14px;
+  right: -6px;
+  z-index: 3;
+  width: 36px;
+  height: 36px;
+  border: 1px solid rgba(255, 216, 155, 0.25);
+  border-radius: 50%;
+  background: var(--color-midnight);
+  color: var(--color-text-primary);
+  font-size: 1.4rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.then-now__close:focus-visible,
+.then-now__handle:focus-visible {
+  outline: 2px solid var(--color-star-gold);
+  outline-offset: 2px;
+}
+
+.then-now__stage {
+  --divider: 50%;
+  position: relative;
+  aspect-ratio: 4 / 3;
+  max-height: 70vh;
+  margin: 0 auto;
+  border-radius: 12px;
+  overflow: hidden;
+  touch-action: none; /* dragging the divider must not scroll the page */
+  user-select: none;
+  cursor: ew-resize;
+}
+
+.then-now__layer {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.then-now__layer img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+}
+.then-now__layer--then {
+  clip-path: inset(0 calc(100% - var(--divider)) 0 0);
+}
+
+/* Placeholder shown when a photo isn't available yet: warm gold wash for the past, cool teal for now. */
+.then-now__layer.is-placeholder { color: var(--color-text-secondary); font-size: 1.5rem; }
+.then-now__layer--then.is-placeholder {
+  background: radial-gradient(circle at 30% 30%, rgba(255, 216, 155, 0.35), var(--color-midnight));
+}
+.then-now__layer--now.is-placeholder {
+  background: radial-gradient(circle at 70% 30%, rgba(94, 234, 212, 0.25), var(--color-midnight));
+}
+
+.then-now__label {
+  position: absolute;
+  top: 12px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(10, 14, 39, 0.65);
+  color: var(--color-text-primary);
+  font-size: 0.65rem;
+  pointer-events: none;
+}
+.then-now__label--then { left: 12px; }
+.then-now__label--now { right: 12px; }
+
+/* Upload controls: bottom corners of the stage (not inside a .then-now__layer, so the "then"
+   side's clip-path never hides one). Small and quiet — this is a maintenance action, not the
+   point of the slider. */
+.then-now__upload {
+  position: absolute;
+  bottom: 10px;
+  z-index: 1;
+  max-width: 46%;
+  text-align: center;
+}
+.then-now__upload--then { left: 10px; }
+.then-now__upload--now { right: 10px; }
+.then-now__upload-btn {
+  padding: 5px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 999px;
+  background: rgba(10, 14, 39, 0.55);
+  color: var(--color-text-primary);
+  font-size: 0.65rem;
+  cursor: pointer;
+}
+.then-now__upload-btn:hover { background: rgba(10, 14, 39, 0.75); }
+.then-now__upload-btn:disabled { opacity: 0.6; cursor: default; }
+.then-now__upload-btn:focus-visible { outline: 2px solid var(--color-star-gold); outline-offset: 2px; }
+.then-now__upload-status {
+  min-height: 1em;
+  margin: 4px 0 0;
+  font-size: 0.6rem;
+  color: var(--color-text-secondary);
+  text-shadow: 0 1px 2px rgba(10, 14, 39, 0.8); /* sits over a photo, not just the placeholder wash */
+}
+
+.then-now__handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--divider);
+  width: 44px; /* generous touch target; the visible line is the ::before */
+  margin-left: -22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: ew-resize;
+}
+.then-now__handle::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--color-star-white);
+  box-shadow: 0 0 12px rgba(255, 216, 155, 0.8);
+}
+.then-now__grip {
+  position: relative;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, var(--color-star-white), var(--color-star-gold));
+  box-shadow: 0 0 18px rgba(255, 216, 155, 0.7);
+}
+
+.then-now__caption {
+  margin-top: 14px;
+  text-align: center;
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--color-star-gold);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .then-now__panel,
+  .then-now.is-open .then-now__panel { transform: none; }
+}
+
+/* Keep each placeholder label on its own side so it never sits under the centre handle. */
+.then-now__layer--then.is-placeholder { justify-content: flex-start; padding-left: 12%; }
+.then-now__layer--now.is-placeholder { justify-content: flex-end; padding-right: 12%; }

@@ -1,0 +1,87 @@
+{
+  "people": [
+    { "id": "grandfather", "name": "Grandfather", "familyRole": "Grandfather", "emoji": "👴", "birth": 1938, "death": 2012, "birthday": "03-14", "role": "blood", "partnerOf": "grandmother", "isFounder": true, "photo": null, "parents": [], "generation": 0, "side": "maternal", "bio": "Where it all began.", "memories": [
+      { "type": "thenNow", "then": "grandfather_then.jpg", "now": "grandfather_now.jpg", "caption": "Same steady hands, decades apart" }
+    ], "postcards": [] },
+    { "id": "grandmother", "name": "Grandmother", "familyRole": "Grandmother", "emoji": "👵", "birth": 1941, "death": 2021, "birthday": "11-02", "role": "blood", "partnerOf": "grandfather", "isFounder": true, "photo": null, "parents": [], "generation": 0, "side": "maternal", "bio": "Same laugh, every generation since.", "memories": [
+      { "type": "thenNow", "then": "grandmother_young.jpg", "now": "grandmother_now.jpg", "caption": "Same laugh, 60 years apart" }
+    ], "postcards": [] },
+
+    { "id": "uncle1", "name": "Uncle 1", "familyRole": "Eldest Uncle", "emoji": "🧔", "birth": 1963, "death": null, "birthday": "05-27", "role": "blood", "partnerOf": null, "isFounder": false, "photo": null, "parents": ["grandfather", "grandmother"], "generation": 1, "side": "maternal", "bio": "", "memories": [
+      { "type": "thenNow", "then": "uncle1_then.jpg", "now": "uncle1_now.jpg", "caption": "Still the first one at the table" }
+    ], "postcards": [] },
+    { "id": "wife-uncle1", "name": "Wife-Uncle1", "familyRole": "Aunty", "emoji": "👩", "birth": 1965, "death": null, "birthday": "08-09", "role": "spouse", "partnerOf": "uncle1", "isFounder": false, "photo": null, "parents": [], "generation": 1, "side": "maternal", "bio": "", "memories": [
+      { "type": "thenNow", "then": "wife-uncle1_then.jpg", "now": "wife-uncle1_now.jpg", "caption": "The same warm smile, all these years" }
+    ], "postcards": [], "color": "#C97FA0" },
+    { "id": "uncle2", "name": "Uncle 2", "familyRole": "Youngest Uncle", "emoji": "🧔", "birth": 1969, "death": null, "birthday": "01-19", "role": "blood", "partnerOf": null, "isFounder": false, "photo": null, "parents": ["grandfather", "grandmother"], "generation": 1, "side": "maternal", "bio": "", "memories": [
+      { "type": "thenNow", "then": "uncle2_then.jpg", "now": "uncle2_now.jpg", "caption": "Same grin, a few more stories" }
+    ], "postcards": [] },
+    { "id": "wife-uncle2", "name": "Wife-Uncle2", "familyRole": "Aunty", "emoji": "👩", "birth": 1971, "death": null, "birthday": "12-24", "role": "spouse", "partnerOf": "uncle2", "isFounder": false, "photo": null, "parents": [], "generation": 1, "side": "maternal", "bio": "", "memories": [
+      { "type": "thenNow", "then": "wife-uncle2_then.jpg", "now": "wife-uncle2_now.jpg", "caption": "Laughing at the same old joke" }
+    ], "postcards": [], "color": "#7C6FB0" },
+    { "id": "aunty1", "name": "Aunty 1", "familyRole": "Aunty", "emoji": "👩", "birth": 1964, "death": null, "birthday": "04-06", "role": "blood", "partnerOf": null, "isFounder": false, "photo": null, "parents": ["grandfather", "grandmother"], "generation": 1, "side": "maternal", "bio": "", "memories": [
+      { "type": "thenNow", "then": "aunty1_then.jpg", "now": "aunty1_now.jpg", "caption": "Same sparkle, thirty years on" }
+    ], "postcards": [] },
+    { "id": "husband-aunty1", "name": "Husband-Aunty1", "familyRole": "Uncle", "emoji": "🧔", "birth": 1962, "death": 2021, "birthday": "10-30", "role": "spouse", "partnerOf": "aunty1", "isFounder": false, "photo": null, "parents": [], "generation": 1, "side": "maternal", "bio": "", "memories": [
+      { "type": "thenNow", "then": "husband-aunty1_then.jpg", "now": "husband-aunty1_now.jpg", "caption": "Always ready with a story" }
+    ], "postcards": [], "color": "#4A90C4" },
+    { "id": "mom", "name": "Mom", "familyRole": "Mother", "emoji": "👩", "birth": 1966, "death": null, "birthday": "09-20", "role": "blood", "partnerOf": null, "isFounder": false, "photo": null, "parents": ["grandfather", "grandmother"], "generation": 1, "side": "maternal", "bio": "The oldest of four, the one who kept everyone's birthdays straight.", "memories": [
+      { "type": "thenNow", "then": "mom_then.jpg", "now": "mom_now.jpg", "caption": "Same eyes, a lifetime of birthdays remembered" }
+    ], "postcards": [
+      { "from": "dad", "date": "2023-07-14", "photo": "paris.jpg", "note": "Thought of you at the bakery 💛" }
+    ] },
+    { "id": "dad", "name": "Dad", "familyRole": "Father", "emoji": "👨", "birth": 1964, "death": null, "birthday": "06-15", "role": "spouse", "partnerOf": "mom", "isFounder": false, "photo": null, "parents": [], "generation": 1, "side": "paternal", "bio": "Married into the family, never left the kitchen table debates.", "memories": [
+      { "type": "thenNow", "then": "dad_then.jpg", "now": "dad_now.jpg", "caption": "Same kitchen-table grin" }
+    ], "postcards": [], "color": "#2E9A72" },
+
+    { "id": "cousin1", "name": "Cousin 1", "familyRole": "Cousin", "emoji": "🧑", "birth": 1986, "death": null, "birthday": "02-11", "role": "blood", "partnerOf": null, "isFounder": false, "photo": null, "parents": ["husband-aunty1", "aunty1"], "generation": 2, "side": "maternal", "bio": "", "memories": [
+      { "type": "thenNow", "then": "cousin1_then.jpg", "now": "cousin1_now.jpg", "caption": "Grew up, still the same cheeky look" }
+    ], "postcards": [] },
+    { "id": "c1-hus", "name": "C1-Hus", "familyRole": "Cousin Spouse", "emoji": "🧔", "birth": 1985, "death": null, "birthday": "07-22", "role": "spouse", "partnerOf": "cousin1", "isFounder": false, "photo": null, "parents": [], "generation": 2, "side": "maternal", "bio": "", "memories": [
+      { "type": "thenNow", "then": "c1-hus_then.jpg", "now": "c1-hus_now.jpg", "caption": "New to the family, never left" }
+    ], "postcards": [], "color": "#C15B3E" },
+    { "id": "cousin2", "name": "Cousin 2", "familyRole": "Cousin", "emoji": "👧", "birth": 1988, "death": null, "birthday": "03-29", "role": "blood", "partnerOf": null, "isFounder": false, "photo": null, "parents": ["husband-aunty1", "aunty1"], "generation": 2, "side": "maternal", "bio": "", "memories": [
+      { "type": "thenNow", "then": "cousin2_then.jpg", "now": "cousin2_now.jpg", "caption": "Same giggle, bigger adventures" }
+    ], "postcards": [] },
+    { "id": "c2-wife", "name": "C2-Wife", "familyRole": "Cousin Spouse", "emoji": "👩", "birth": 1989, "death": null, "birthday": "10-08", "role": "spouse", "partnerOf": "cousin2", "isFounder": false, "photo": null, "parents": [], "generation": 2, "side": "maternal", "bio": "", "memories": [
+      { "type": "thenNow", "then": "c2-wife_then.jpg", "now": "c2-wife_now.jpg", "caption": "Same bright smile, a new family" }
+    ], "postcards": [], "color": "#5FA8A6" },
+    { "id": "cousin3", "name": "Cousin 3", "familyRole": "Cousin", "emoji": "🧑", "birth": 1988, "death": null, "birthday": "08-30", "role": "blood", "partnerOf": null, "isFounder": false, "photo": null, "parents": ["uncle1", "wife-uncle1"], "generation": 2, "side": "maternal", "bio": "", "memories": [
+      { "type": "thenNow", "then": "cousin3_then.jpg", "now": "cousin3_now.jpg", "caption": "From tiny to towering, same twinkle" }
+    ], "postcards": [] },
+    { "id": "c3-wife", "name": "C3-Wife", "familyRole": "Cousin Spouse", "emoji": "👩", "birth": 1988, "death": null, "birthday": "05-04", "role": "spouse", "partnerOf": "cousin3", "isFounder": false, "photo": null, "parents": [], "generation": 2, "side": "maternal", "bio": "", "memories": [
+      { "type": "thenNow", "then": "c3-wife_then.jpg", "now": "c3-wife_now.jpg", "caption": "Same quiet laugh, always welcome" }
+    ], "postcards": [], "color": "#A084C4" },
+    { "id": "cousin4", "name": "Cousin 4", "familyRole": "Cousin", "emoji": "👧", "birth": 1991, "death": null, "birthday": "12-03", "role": "blood", "partnerOf": null, "isFounder": false, "photo": null, "parents": ["uncle1", "wife-uncle1"], "generation": 2, "side": "maternal", "bio": "", "memories": [
+      { "type": "thenNow", "then": "cousin4_then.jpg", "now": "cousin4_now.jpg", "caption": "Same mischief, just taller" }
+    ], "postcards": [] },
+    { "id": "c4-wife", "name": "C4-Wife", "familyRole": "Cousin Spouse", "emoji": "👩", "birth": 1992, "death": null, "birthday": "07-01", "role": "spouse", "partnerOf": "cousin4", "isFounder": false, "photo": null, "parents": [], "generation": 2, "side": "maternal", "bio": "", "memories": [
+      { "type": "thenNow", "then": "c4-wife_then.jpg", "now": "c4-wife_now.jpg", "caption": "Same kind eyes, a home in the family" }
+    ], "postcards": [], "color": "#D97FA4" },
+    { "id": "cousin5", "name": "Cousin 5", "familyRole": "Cousin", "emoji": "🧑", "birth": 1995, "death": null, "birthday": "11-17", "role": "blood", "partnerOf": null, "isFounder": false, "photo": null, "parents": ["uncle2", "wife-uncle2"], "generation": 2, "side": "maternal", "bio": "", "memories": [
+      { "type": "thenNow", "then": "cousin5_then.jpg", "now": "cousin5_now.jpg", "caption": "The youngest cousin, all grown up" }
+    ], "postcards": [] },
+    { "id": "me", "name": "Me!", "familyRole": "The Memory Keeper", "emoji": "🌟", "birth": 1991, "death": null, "birthday": "04-21", "role": "blood", "partnerOf": null, "isFounder": false, "photo": null, "parents": ["dad", "mom"], "generation": 2, "side": "maternal", "bio": "The memory keeper — the one building this galaxy.", "memories": [
+      { "type": "thenNow", "then": "oak_1978.jpg", "now": "oak_2024.jpg", "caption": "the same oak, forty-six years apart" }
+    ], "postcards": [] },
+
+    { "id": "nephew1", "name": "Nephew 1", "familyRole": "Nephew", "emoji": "👦", "birth": 2012, "death": null, "birthday": "01-08", "role": "blood", "partnerOf": null, "isFounder": false, "photo": null, "parents": ["c1-hus", "cousin1"], "generation": 3, "side": "maternal", "bio": "", "memories": [
+      { "type": "thenNow", "then": "nephew1_then.jpg", "now": "nephew1_now.jpg", "caption": "So small then, so tall now" }
+    ], "postcards": [] },
+    { "id": "neice1", "name": "Neice 1", "familyRole": "Neice", "emoji": "👧", "birth": 2015, "death": null, "birthday": "06-06", "role": "blood", "partnerOf": null, "isFounder": false, "photo": null, "parents": ["c1-hus", "cousin1"], "generation": 3, "side": "maternal", "bio": "", "memories": [
+      { "type": "thenNow", "then": "neice1_then.jpg", "now": "neice1_now.jpg", "caption": "Same curls, bigger laugh" }
+    ], "postcards": [] },
+    { "id": "nephew2", "name": "Nephew 2", "familyRole": "Nephew", "emoji": "👦", "birth": 2016, "death": null, "birthday": "09-25", "role": "blood", "partnerOf": null, "isFounder": false, "photo": null, "parents": ["c2-wife", "cousin2"], "generation": 3, "side": "maternal", "bio": "", "memories": [
+      { "type": "thenNow", "then": "nephew2_then.jpg", "now": "nephew2_now.jpg", "caption": "Every summer a little taller" }
+    ], "postcards": [] },
+    { "id": "neice2", "name": "Neice 2", "familyRole": "Neice", "emoji": "👧", "birth": 2017, "death": null, "birthday": "03-12", "role": "blood", "partnerOf": null, "isFounder": false, "photo": null, "parents": ["c3-wife", "cousin3"], "generation": 3, "side": "maternal", "bio": "", "memories": [
+      { "type": "thenNow", "then": "neice2_then.jpg", "now": "neice2_now.jpg", "caption": "Same sparkle, growing every day" }
+    ], "postcards": [] }
+  ],
+  "events": [
+    { "year": 1962, "month": 10, "day": 14, "personId": "grandmother", "label": "Wedding", "color": "maternal" },
+    { "year": 1966, "month": 9, "day": 20, "personId": "mom", "label": "Mom born", "color": "maternal" },
+    { "year": 1989, "month": 6, "day": 10, "personId": "mom", "label": "Married Dad", "color": "shared" },
+    { "year": 1991, "month": 4, "day": 21, "personId": "me", "label": "Me! born", "color": "shared" }
+  ]
+}

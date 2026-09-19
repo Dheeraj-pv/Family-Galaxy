@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>test: print sheet</title>
+  <link rel="stylesheet" href="../css/tokens.css" />
+  <link rel="stylesheet" href="../css/base.css" />
+  <link rel="stylesheet" href="../css/print.css" />
+  <style>
+    body { overflow: auto; height: auto; padding: 24px; font: 14px/1.5 monospace; background: #0a0e27; color: #f8f5f0; }
+    body::before, body::after { display: none; }
+    .pass { color: #5eead4; } .fail { color: #fb7185; font-weight: bold; }
+    /* off-screen stage used to measure the real layout at paper width */
+    #stage { position: absolute; left: -9999px; top: 0; width: 182mm; }
+  </style>
+</head>
+<body>
+  <h1>print sheet: model + render</h1>
+  <p>Add <code>?preview</code> to see the sheet on screen at A4 content width (182mm).</p>
+  <div id="output">Running…</div>
+  <div id="stage"></div>
+  <div id="print-sheet" hidden></div>
+
+  <script type="module">
+    import { setPeople, setEvents, getPeople } from '../js/state.js';
+    import { normalizePerson, normalizeEvent } from '../js/data/schema.js';
+    import { buildFamilySheet, lifeText, birthdayText, printedOnText } from '../js/print/sheetModel.js';
+    import { renderFamilySheet, initPrintSheet } from '../js/print/printSheet.js';
+
+    const results = [];
+    const check = (label, actual, expected) => results.push({ label, actual, expected, pass: JSON.stringify(actual) === JSON.stringify(expected) });
+
+    // ---- small pure helpers ----
+    check('living: b. year', lifeText({ birth: 1991, death: null }), 'b. 1991');
+    check('deceased: range', lifeText({ birth: 1941, death: 2021 }), '1941 – 2021');
+    check('death only', lifeText({ birth: null, death: 2010 }), 'd. 2010');
+    check('unknown both -> empty, never "null"', lifeText({ birth: null, death: null }), '');
+    check('NaN never leaks', lifeText({ birth: NaN, death: undefined }), '');
+    check('birthday formats "14 Jul"', birthdayText('07-14'), '14 Jul');
+    check('leap day is a real birthday', birthdayText('02-29'), '29 Feb');
+    check('Feb 30 rejected', birthdayText('02-30'), '');
+    check('month 13 rejected', birthdayText('13-01'), '');
+    check('sloppy format rejected', birthdayText('7-14'), '');
+    check('missing birthday -> empty', birthdayText(null), '');
+    check('printed-on from a civil date', printedOnText({ year: 2026, month: 9, day: 18 }), '18 Sep 2026');
+    check('printed-on from a Date', printedOnText(new Date(2026, 0, 5)), '5 Jan 2026');
+
+    // ---- the real reference family ----
+    const raw = await fetch('../data/family.json', { cache: 'no-store' }).then((r) => r.json());
+    const people = raw.people.map(normalizePerson);
+    const events = raw.events.map(normalizeEvent);
+    const today = { year: 2026, month: 9, day: 18 };
+    const sheet = buildFamilySheet(people, events, { today });
+
+    check('one founding couple, one branch', sheet.branches.length, 1);
+    check('branch is named for both founders', sheet.branches[0].names, 'Grandfather & Grandmother');
+    check('founder lives', sheet.branches[0].founders.map((f) => f.life), ['1938 – 2012', '1941 – 2021']);
+    const kids = sheet.branches[0].children;
+    check('founders’ children in birth order', kids.map((k) => k.id), ['uncle1', 'aunty1', 'mom', 'uncle2']);
+    const node = (id, list = kids) => { for (const n of list) { if (n.id === id) return n; const f = node(id, n.children); if (f) return f; } return null; };
+    check('mom: married dad', node('mom').spouses.map((s) => s.id), ['dad']);
+    check('mom: child is Me!', node('mom').children.map((c) => c.id), ['me']);
+    check('aunty1: husband attached to her', node('aunty1').spouses.map((s) => s.id), ['husband-aunty1']);
+    check('aunty1: kids by birth year', node('aunty1').children.map((c) => c.id), ['cousin1', 'cousin2']);
+    check('uncle1: kids by birth year', node('uncle1').children.map((c) => c.id), ['cousin3', 'cousin4']);
+    check('a married-in spouse never appears as a child', kids.flatMap(function walk(n) { return [n, ...n.children.flatMap(walk)]; }).some((n) => n.id === 'dad'), false);
+
+    const placedIds = [];
+    (function walk(list) { list.forEach((n) => { placedIds.push(n.id, ...n.spouses.map((s) => s.id)); walk(n.children); }); })(kids);
+    placedIds.push(...sheet.branches[0].founders.map((f) => f.id), ...sheet.others.map((o) => o.id));
+    check('every one of the 24 people is on the tree exactly once', [...placedIds].sort(), people.map((p) => p.id).sort());
+    check('nobody is left out of the tree', sheet.others, []);
+
+    check('people list has everyone', sheet.people.length, 24);
+    check('people list starts with the founders (generation 0)', sheet.people.slice(0, 2).map((p) => p.id).sort(), ['grandfather', 'grandmother']);
+    const mom = sheet.people.find((p) => p.id === 'mom');
+    check('mom row: role, life, birthday', [mom.familyRole, mom.life, mom.birthday], ['Mother', 'b. 1966', '20 Sep']);
+    check('printed-on and count are carried', [sheet.printedOn, sheet.count], ['18 Sep 2026', 24]);
+
+    check('the seeded postcard is listed with its sender resolved', sheet.postcards,
+      [{ to: 'Mom', from: 'Dad', note: 'Thought of you at the bakery 💛', date: '14 Jul 2023' }]);
+    check('moments are in year order', sheet.moments.map((m) => m.when.slice(-4)), ['1962', '1966', '1989', '1991']);
+    check('a moment carries its side', sheet.moments[0].side, "Mom's side");
+    check('a moment carries the person', sheet.moments[1].who, 'Mom');
+    check('whole-family side wording', sheet.moments[2].side, 'Whole family');
+
+    // ---- synthetic edge cases ----
+    const empty = buildFamilySheet([], [], { today });
+    check('no people: nothing to draw, no throw', [empty.branches, empty.people, empty.postcards, empty.moments], [[], [], [], []]);
+
+    const two = [
+      { id: 'a1', name: 'A1', role: 'blood', isFounder: true, partnerOf: 'a2', parents: [], generation: 0, birth: 1900 },
+      { id: 'a2', name: 'A2', role: 'blood', isFounder: true, partnerOf: 'a1', parents: [], generation: 0, birth: 1902 },
+      { id: 'b1', name: 'B1', role: 'blood', isFounder: true, partnerOf: 'b2', parents: [], generation: 0, birth: 1910 },
+      { id: 'b2', name: 'B2', role: 'blood', isFounder: true, partnerOf: 'b1', parents: [], generation: 0, birth: 1911 },
+      { id: 'k', name: 'K', role: 'blood', parents: ['b1', 'b2'], generation: 1, birth: null },
+      { id: 'j', name: 'J', role: 'blood', parents: ['b1'], generation: 1, birth: 1935 },
+      { id: 'half', name: 'Half', role: 'blood', parents: ['a1', 'b1'], generation: 1, birth: 1930 },
+      { id: 'lost', name: 'Lost', role: 'blood', parents: ['nobody'], generation: 1, birth: 1940 },
+    ];
+    const twoSheet = buildFamilySheet(two, [], { today });
+    check('two founding couples make two branches', twoSheet.branches.map((b) => b.names), ['A1 & A2', 'B1 & B2']);
+    check('a person with unknown birth sorts last among siblings', twoSheet.branches[1].children.map((c) => c.id), ['j', 'k']);
+    check('a half-sibling appears once (under the first branch that claims them)', twoSheet.branches.flatMap((b) => b.children.map((c) => c.id)).filter((id) => id === 'half').length, 1);
+    check('a person whose parent is missing still gets a place', twoSheet.others.map((o) => o.id), ['lost']);
+
+    // ---- rendering ----
+    const stage = document.getElementById('stage');
+    renderFamilySheet(stage, sheet);
+    check('one h1', stage.querySelectorAll('h1').length, 1);
+    check('four sections: tree, everyone, postcards, moments', [...stage.querySelectorAll('h2')].map((h) => h.textContent),
+      ['Our family tree', 'Everyone at a glance', 'Postcards along the way', 'Moments we kept']);
+    check('table has a row per person', stage.querySelectorAll('tbody tr').length, 24);
+    check('table columns are scoped headers', [...stage.querySelectorAll('thead th')].every((th) => th.scope === 'col'), true);
+    const bloodNonFounders = people.filter((p) => p.role === 'blood' && !p.isFounder).length;
+    check('one tree item per blood relative (spouses sit beside them)', stage.querySelectorAll('.print-sheet__node').length, bloodNonFounders);
+    check('the married line reads "married"', stage.querySelector('.print-sheet__marry').textContent, '✦ married');
+    check('no "null" or "NaN" anywhere on the sheet', /null|NaN|undefined/.test(stage.textContent), false);
+    check('footer line', stage.querySelector('.print-sheet__footer').textContent, 'Kept safe among the stars ✦');
+
+    const bare = document.createElement('div');
+    renderFamilySheet(bare, buildFamilySheet(people.map((p) => ({ ...p, postcards: [] })), [], { today }));
+    check('with no postcards the postcards section is left out', bare.querySelector('.print-sheet__section--postcards'), null);
+    check('with no moments the moments section is left out', bare.querySelector('.print-sheet__section--moments'), null);
+
+    // text goes in as text, never as markup
+    const nasty = [
+      { id: 'x', name: '<img src=x onerror="window.__xss=1">Eve', role: 'blood', isFounder: true, partnerOf: null, parents: [], generation: 0, birth: 1900,
+        familyRole: '<b>bold</b>', postcards: [{ from: '<script>window.__xss=2<\/script>', date: '2020-01-01', note: '<i onclick="window.__xss=3">hi</i>' }] },
+    ];
+    const sandbox = document.createElement('div');
+    renderFamilySheet(sandbox, buildFamilySheet(nasty, [{ year: 1900, label: '<u>label</u>', color: 'shared' }], { today }));
+    check('no element was created from data', sandbox.querySelectorAll('img, script, b, i, u').length, 0);
+    check('the markup shows up as literal text', sandbox.textContent.includes('<img src=x onerror="window.__xss=1">Eve'), true);
+    check('nothing executed', window.__xss, undefined);
+
+    // ---- print mechanics: beforeprint reveals the sheet, afterprint puts everything back ----
+    setPeople(people); setEvents(events);
+    const mount = document.getElementById('print-sheet');
+    const originalTitle = document.title;
+    initPrintSheet();
+    check('hidden and aria-hidden from the start', [mount.hidden, mount.getAttribute('aria-hidden')], [true, 'true']);
+    window.dispatchEvent(new Event('beforeprint'));
+    check('beforeprint fills and reveals the sheet', [mount.hidden, mount.getAttribute('aria-hidden'), mount.querySelectorAll('tbody tr').length], [false, null, 24]);
+    check('the page title becomes the PDF name', document.title, 'The Family Galaxy — family sheet');
+    window.dispatchEvent(new Event('beforeprint')); // twice is fine, and must not lose the original title
+    window.dispatchEvent(new Event('afterprint'));
+    check('afterprint hides and empties the sheet again', [mount.hidden, mount.getAttribute('aria-hidden'), mount.childNodes.length], [true, 'true', 0]);
+    check('the original title is restored', document.title, originalTitle);
+
+    // ---- how long is it? (real layout at paper width, once the fonts are in) ----
+    // The sheet's styles are scoped to #print-sheet, so measure inside the real mount, moved
+    // off-screen with the preview class (which only exists to let it show outside @media print).
+    await document.fonts.ready;
+    mount.className = 'print-sheet--preview';
+    mount.hidden = false;
+    mount.style.cssText = 'position:absolute;left:-9999px;top:0;width:182mm';
+    const mm = (px) => (px / 96) * 25.4;
+    const pageHeightMm = () => mm(mount.querySelector('.print-sheet__page').getBoundingClientRect().height);
+    renderFamilySheet(mount, sheet);
+    const typical = pageHeightMm();
+    // A4 gives 269mm of usable height per page, US Letter 251mm: two pages of Letter is the ceiling.
+    check(`typical 24-person sheet fits two Letter pages (${typical.toFixed(0)}mm of 502mm)`, typical <= 500, true);
+    // a busy family: 8 more postcards and 10 more moments must still be at most three pages
+    const busy = people.map((p) => (p.id === 'dad' ? { ...p, postcards: Array.from({ length: 8 }, (_, i) => ({ from: 'mom', date: `2024-0${i + 1}-10`, note: 'Thinking of you at the lake, wish you had been there with us all summer long' })) } : p));
+    const busyEvents = [...events, ...Array.from({ length: 10 }, (_, i) => ({ year: 1970 + i * 4, label: `Moment ${i + 1}`, color: 'shared' }))];
+    renderFamilySheet(mount, buildFamilySheet(busy, busyEvents, { today }));
+    const heavy = pageHeightMm();
+    check(`a busy sheet still stays within three Letter pages (${heavy.toFixed(0)}mm of 753mm)`, heavy <= 750, true);
+    renderFamilySheet(mount, sheet);
+    window.__sheetHeightMm = typical;
+
+    if (new URLSearchParams(location.search).has('preview')) {
+      // show it on screen, on a cream sheet at A4 content width, for eyeballing
+      mount.style.cssText = 'width:182mm;padding:14mm;margin-top:24px;';
+    } else {
+      mount.hidden = true;
+      mount.className = '';
+      mount.style.cssText = '';
+      mount.textContent = '';
+    }
+
+    const passCount = results.filter((r) => r.pass).length;
+    document.getElementById('output').innerHTML =
+      `<p>${passCount} / ${results.length} passed</p><ul>` +
+      results.map((r) => `<li class="${r.pass ? 'pass' : 'fail'}">${r.pass ? '✓' : '✗'} ${r.label}${r.pass ? '' : ` (expected ${JSON.stringify(r.expected)}, got ${JSON.stringify(r.actual)})`}</li>`).join('') +
+      '</ul>';
+  </script>
+</body>
+</html>

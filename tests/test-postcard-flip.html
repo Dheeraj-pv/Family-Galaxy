@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>test: postcards</title>
+  <link rel="stylesheet" href="../css/tokens.css" />
+  <link rel="stylesheet" href="../css/base.css" />
+  <link rel="stylesheet" href="../css/profile-card.css" />
+  <link rel="stylesheet" href="../css/postcards.css" />
+  <style>
+    body { overflow: auto; padding: 24px; font: 14px/1.5 monospace; }
+    .pass { color: #5eead4; } .fail { color: #fb7185; font-weight: bold; }
+    #board { width: 380px; margin-top: 16px; }
+  </style>
+</head>
+<body>
+  <h1>postcards: model + corkboard + flip</h1>
+  <div id="output">Running…</div>
+  <div id="board"></div>
+
+  <script type="module">
+    import { setPeople, getPeople as getPeopleForTest } from '../js/state.js';
+    import {
+      formatPostcardDate, sortPostcards, resolveSenderName, validatePostcardInput, NOTE_MAX_LENGTH,
+      isEditablePostcard, newPostcardId, withPostcardReplaced, withPostcardRemoved,
+    } from '../js/postcards/postcardModel.js';
+    import { renderCorkboard } from '../js/postcards/corkboard.js';
+
+    const results = [];
+    const check = (label, actual, expected) => results.push({ label, actual, expected, pass: JSON.stringify(actual) === JSON.stringify(expected) });
+
+    // --- pure model ---
+    check('formats an ISO date', formatPostcardDate('2023-07-14'), '14 Jul 2023');
+    check('rejects impossible date (Feb 30)', formatPostcardDate('2023-02-30'), '');
+    check('rejects non-ISO text', formatPostcardDate('yesterday'), '');
+    check('null date -> empty', formatPostcardDate(null), '');
+    check('sorts newest first, undated last',
+      sortPostcards([{ date: '2020-01-01' }, { date: null }, { date: '2024-05-05' }]).map((p) => p.date),
+      ['2024-05-05', '2020-01-01', null]);
+
+    const people = [{ id: 'dad', name: 'Dad', postcards: [] }, { id: 'mom', name: 'Mom', postcards: [
+      { from: 'dad', date: '2023-07-14', photo: null, note: 'Thought of you at the bakery' },
+      { from: 'Auntie May', date: '2024-01-02', photo: 'missing.jpg', note: 'Happy new year!' },
+    ] }];
+    check('resolves a person id to their name', resolveSenderName('dad', people), 'Dad');
+    check('keeps a free-typed name as typed', resolveSenderName('Auntie May', people), 'Auntie May');
+    check('blank sender gets a warm fallback', resolveSenderName('  ', people), 'Someone who loves you');
+
+    const ids = ['dad', 'mom'];
+    const good = validatePostcardInput({ personId: 'mom', from: ' Sam ', note: ' hi ', date: '2024-03-01' }, ids);
+    check('valid input is accepted and trimmed', good.ok && good.postcard, { from: 'Sam', date: '2024-03-01', photo: null, note: 'hi' });
+    const empty = validatePostcardInput({ personId: '', from: '', note: '', date: '' }, ids);
+    check('empty form flags to/from/note', Object.keys(empty.errors ?? {}).sort(), ['from', 'note', 'personId']);
+    check('unknown recipient rejected', validatePostcardInput({ personId: 'ghost', from: 'a', note: 'b' }, ids).errors?.personId !== undefined, true);
+    check('over-long note rejected', validatePostcardInput({ personId: 'mom', from: 'a', note: 'x'.repeat(NOTE_MAX_LENGTH + 1) }, ids).errors?.note !== undefined, true);
+    check('missing date is allowed (stored as null)', validatePostcardInput({ personId: 'mom', from: 'a', note: 'b', date: '' }, ids).postcard?.date, null);
+
+    // --- live corkboard + flip ---
+    setPeople(people);
+    const board = document.getElementById('board');
+    renderCorkboard(board, [people[1]]);
+    const cards = board.querySelectorAll('.postcard');
+    check('renders one card per postcard', cards.length, 2);
+    check('newest postcard is first', cards[0].querySelector('.postcard__note').textContent, 'Happy new year!');
+    check('sender id resolved on the front', cards[1].querySelector('.postcard__from').textContent, 'From Dad');
+    check('starts unflipped', cards[0].getAttribute('aria-pressed'), 'false');
+    cards[0].click();
+    check('click flips (aria-pressed true)', cards[0].getAttribute('aria-pressed'), 'true');
+    check('front face hidden from screen readers when flipped', cards[0].querySelector('.postcard__face--front').getAttribute('aria-hidden'), 'true');
+    check('back face exposed when flipped', cards[0].querySelector('.postcard__face--back').getAttribute('aria-hidden'), 'false');
+    cards[0].click();
+    check('second click flips back', cards[0].getAttribute('aria-pressed'), 'false');
+    renderCorkboard(board, [{ postcards: [] }]);
+    check('empty board shows a warm message', board.querySelector('.profile-card__placeholder')?.textContent.includes('No postcards yet'), true);
+
+    renderCorkboard(board, [people[1]]);
+    // --- editing / deleting (pure helpers) ---
+    check('a postcard with an id is editable', isEditablePostcard({ id: 'pc_1', note: 'x' }), true);
+    check('a family.json postcard (no id) is read-only', isEditablePostcard({ note: 'x' }), false);
+    check('empty id is not editable', isEditablePostcard({ id: '' }), false);
+    const a = newPostcardId(); const b = newPostcardId();
+    check('ids look like pc_...', /^pc_[a-z0-9]{6,}$/.test(a), true);
+    check('ids are unique', a !== b, true);
+    const list = [{ id: 'a', note: '1' }, { id: 'b', note: '2' }, { note: 'seed' }];
+    check('replace swaps only the matching id', withPostcardReplaced(list, 'b', { id: 'b', note: 'NEW' }).map((p) => p.note), ['1', 'NEW', 'seed']);
+    check('replace does not mutate the input', list[1].note, '2');
+    check('remove drops only the matching id', withPostcardRemoved(list, 'a').map((p) => p.note), ['2', 'seed']);
+    check('remove never drops seed postcards (no id)', withPostcardRemoved(list, undefined).length, 2);
+
+    // --- corkboard shows Edit/Delete only for editable postcards; delete asks first ---
+    setPeople([{ id: 'mom', name: 'Mom', postcards: [
+      { from: 'dad', date: '2023-07-14', photo: null, note: 'seed one' },
+      { id: 'pc_mine', from: 'Sam', date: '2024-01-02', photo: null, note: 'mine' },
+    ] }]);
+    let edited = null; let deleted = null;
+    const b2 = document.createElement('div'); document.body.appendChild(b2);
+    renderCorkboard(b2, [getPeopleForTest()[0]], { onEdit: (o, p) => { edited = [o, p.id]; }, onDelete: (o, p) => { deleted = [o, p.id]; } });
+    const slots = b2.querySelectorAll('.postcard-slot');
+    check('two postcards rendered', slots.length, 2);
+    check('seed postcard has NO edit/delete buttons', b2.querySelectorAll('.postcard-actions').length, 1);
+    const mine = b2.querySelector('[data-postcard-id="pc_mine"]');
+    check('user-added postcard has Edit and Delete', mine.querySelectorAll('.postcard-action').length, 2);
+    check('buttons are named for the sender', mine.querySelector('.postcard-action--edit').getAttribute('aria-label'), 'Edit postcard from Sam');
+    mine.querySelector('.postcard-action--edit').click();
+    check('Edit calls back with owner and postcard id', JSON.stringify(edited), JSON.stringify(['mom', 'pc_mine']));
+    mine.querySelector('.postcard-action--delete').click();
+    check('Delete asks first (no callback yet)', deleted, null);
+    check('confirmation is shown', !!mine.querySelector('.postcard-actions__question'), true);
+    mine.querySelectorAll('.postcard-action')[0].click(); // Keep
+    check('Keep cancels and restores Edit/Delete', mine.querySelectorAll('.postcard-action').length, 2);
+    check('Keep does not delete', deleted, null);
+    mine.querySelector('.postcard-action--delete').click();
+    mine.querySelector('.postcard-action--delete').click(); // confirm
+    check('confirming Delete calls back', JSON.stringify(deleted), JSON.stringify(['mom', 'pc_mine']));
+    b2.remove();
+
+    const passCount = results.filter((r) => r.pass).length;
+    document.getElementById('output').innerHTML =
+      `<p>${passCount} / ${results.length} passed</p><ul>` +
+      results.map((r) => `<li class="${r.pass ? 'pass' : 'fail'}">${r.pass ? '✓' : '✗'} ${r.label}${r.pass ? '' : ` (expected ${JSON.stringify(r.expected)}, got ${JSON.stringify(r.actual)})`}</li>`).join('') +
+      '</ul>';
+  </script>
+</body>
+</html>

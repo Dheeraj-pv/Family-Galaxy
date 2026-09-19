@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>test: orbitMath</title>
+  <style>
+    body { background: #0a0e27; color: #f8f5f0; font: 14px/1.5 monospace; padding: 24px; }
+    .pass { color: #5eead4; }
+    .fail { color: #fb7185; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h1>orbitMath.js — assertions against data/family.json</h1>
+  <div id="output">Running…</div>
+
+  <script type="module">
+    import { normalizePerson } from '../js/data/schema.js';
+    import {
+      computeStarMapLayout,
+      bloodStarSize,
+      spousePlanetSize,
+      lineageOrbitRadius,
+      marriageOrbitRadius,
+      SIZE_SCALE,
+    } from '../js/starmap/orbitMath.js';
+
+    const output = document.getElementById('output');
+    const results = [];
+
+    function check(label, actual, expected, tolerance = 0.01) {
+      const pass = typeof expected === 'number'
+        ? Math.abs(actual - expected) <= tolerance
+        : actual === expected;
+      results.push({ label, pass, actual, expected });
+      console.assert(pass, `${label}: expected ${expected}, got ${actual}`);
+    }
+
+    const raw = await fetch('../data/family.json').then((r) => r.json());
+    const people = raw.people.map(normalizePerson);
+
+    const { positions, founderGroups } = computeStarMapLayout(people);
+
+    // --- founder grouping ---
+    check('one founder group formed', founderGroups.length, 1);
+    check('founder group contains both grandparents', founderGroups[0].personIds.slice().sort().join(','), ['grandfather', 'grandmother'].sort().join(','));
+    check('grandfather is flagged isBlackHole', positions.get('grandfather').isBlackHole, true);
+    check('grandfather and grandmother share the same anchor', positions.get('grandfather').x, positions.get('grandmother').x);
+
+    // --- lineage orbit radii by parent generation ---
+    const mom = positions.get('mom');
+    check('mom (gen1) orbit radius == lineageOrbitRadius(0)', mom.orbitRadius, lineageOrbitRadius(0));
+    check('mom orbit radius == 230 * SIZE_SCALE (known mockup value, scaled)', mom.orbitRadius, 230 * SIZE_SCALE);
+    check('mom size == bloodStarSize(1)', mom.size, bloodStarSize(1));
+    check('mom size == 30 * SIZE_SCALE (known mockup value, scaled)', mom.size, 30 * SIZE_SCALE);
+    check('mom orbitKind == "lineage"', mom.orbitKind, 'lineage');
+
+    const cousin1 = positions.get('cousin1');
+    check('cousin1 (gen2, child of aunty1) orbit radius == lineageOrbitRadius(1)', cousin1.orbitRadius, lineageOrbitRadius(1));
+    check('cousin1 orbit radius == 95 * SIZE_SCALE (known mockup value, scaled)', cousin1.orbitRadius, 95 * SIZE_SCALE);
+    check('cousin1 orbit is centered on aunty1', cousin1.orbitCenter.x, positions.get('aunty1').x);
+
+    const nephew1 = positions.get('nephew1');
+    check('nephew1 (gen3, child of cousin1) orbit radius == lineageOrbitRadius(2)', nephew1.orbitRadius, lineageOrbitRadius(2));
+    check('nephew1 orbit radius == 55 * SIZE_SCALE (known mockup value, scaled)', nephew1.orbitRadius, 55 * SIZE_SCALE);
+    check('nephew1 orbit is centered on cousin1', nephew1.orbitCenter.x, cousin1.x);
+
+    // --- spouse (marriage orbit) ---
+    const dad = positions.get('dad');
+    check('dad (spouse, partner gen1) orbit radius == marriageOrbitRadius(1)', dad.orbitRadius, marriageOrbitRadius(1));
+    check('dad orbit radius == 45 * SIZE_SCALE (known mockup value, scaled)', dad.orbitRadius, 45 * SIZE_SCALE);
+    check('dad orbit is centered on mom (the star he married into)', dad.orbitCenter.x, mom.x);
+    check('dad is not flagged isBlackHole', dad.isBlackHole, false);
+    check('dad size == spousePlanetSize(1)', dad.size, spousePlanetSize(1));
+    check('dad size == 26 * SIZE_SCALE (known mockup value, scaled)', dad.size, 26 * SIZE_SCALE);
+    check('dad orbitKind == "marriage"', dad.orbitKind, 'marriage');
+    check('grandfather orbitKind == "none"', positions.get('grandfather').orbitKind, 'none');
+
+    // --- real sibling branching (the old 1-child-per-generation fixture never exercised this):
+    //     uncle1, uncle2, aunty1, mom are 4 blood siblings sharing one wedge around the founders'
+    //     black hole. They must land on the SAME ring (radius) but at 4 DISTINCT, evenly-spaced
+    //     angles (π/2 apart, in some order) rather than stacked on top of each other.
+    const gen1Siblings = ['uncle1', 'uncle2', 'aunty1', 'mom'].map((id) => positions.get(id));
+    check('all 4 gen1 siblings share the same orbit radius', new Set(gen1Siblings.map((p) => Math.round(p.orbitRadius * 1000))).size, 1);
+    const gen1Angles = gen1Siblings.map((p) => p.angle).sort((a, b) => a - b);
+    let evenlySpaced = true;
+    for (let i = 1; i < gen1Angles.length; i++) {
+      if (Math.abs((gen1Angles[i] - gen1Angles[i - 1]) - Math.PI / 2) > 0.01) evenlySpaced = false;
+    }
+    check('4 gen1 siblings are evenly spaced π/2 apart around their shared wedge', evenlySpaced, true);
+
+    // aunty1 has 2 children (cousin1, cousin2): same ring, distinct angles, no overlap.
+    const auntysKids = ['cousin1', 'cousin2'].map((id) => positions.get(id));
+    check('aunty1\'s 2 children share the same orbit radius', auntysKids[0].orbitRadius, auntysKids[1].orbitRadius);
+    check('aunty1\'s 2 children are NOT at the same angle (would render on top of each other)', Math.abs(auntysKids[0].angle - auntysKids[1].angle) > 0.1, true);
+
+    // cousin1 has 2 children (nephew1, neice1): same check one generation deeper.
+    const cousin1sKids = ['nephew1', 'neice1'].map((id) => positions.get(id));
+    check('cousin1\'s 2 children share the same orbit radius', cousin1sKids[0].orbitRadius, cousin1sKids[1].orbitRadius);
+    check('cousin1\'s 2 children are NOT at the same angle', Math.abs(cousin1sKids[0].angle - cousin1sKids[1].angle) > 0.1, true);
+
+    // --- decay formula beyond the mockup's known generations (base ratios are scale-independent) ---
+    const gen3to2Ratio = 14 / 22;
+    check('bloodStarSize(4) continues gen3->gen2 ratio', bloodStarSize(4), 14 * gen3to2Ratio * SIZE_SCALE);
+    check('bloodStarSize(3) matches known mockup value unchanged, scaled', bloodStarSize(3), 14 * SIZE_SCALE);
+
+    const spouseRatio = 20 / 26;
+    check('spousePlanetSize(3) continues gen2->gen1 ratio', spousePlanetSize(3), 20 * spouseRatio * SIZE_SCALE);
+
+    const lineageRatio = 55 / 95;
+    check('lineageOrbitRadius(3) continues gen2->gen1 ratio', lineageOrbitRadius(3), 55 * lineageRatio * SIZE_SCALE);
+
+    const marriageRatio = 32 / 45;
+    check('marriageOrbitRadius(3) continues gen2->gen1 ratio', marriageOrbitRadius(3), 32 * marriageRatio * SIZE_SCALE);
+
+    // --- orbital motion: timeMs=0 (default) must reproduce the exact static layout above ---
+    const staticAgain = computeStarMapLayout(people);
+    check('timeMs=0 is the default (no timeMs arg == timeMs 0)', staticAgain.positions.get('mom').angle, mom.angle);
+
+    // --- orbital motion: a large timeMs actually rotates orbiting bodies ---
+    const ONE_HOUR_MS = 60 * 60 * 1000;
+    const rotated = computeStarMapLayout(people, ONE_HOUR_MS).positions;
+    check('mom (on an orbit) has a different angle after 1 hour of drift', Math.abs(rotated.get('mom').angle - mom.angle) > 0.01, true);
+    check(
+      'grandfather (founder, no orbit) is unaffected by timeMs',
+      rotated.get('grandfather').x === positions.get('grandfather').x && rotated.get('grandfather').y === positions.get('grandfather').y,
+      true,
+    );
+
+    // --- orbital motion composes hierarchically: nephew1's orbit still centers on cousin1's CURRENT (rotated) position ---
+    const rotatedCousin1 = rotated.get('cousin1');
+    const rotatedNephew1 = rotated.get('nephew1');
+    check('nephew1 orbit center tracks cousin1\'s rotated x', rotatedNephew1.orbitCenter.x, rotatedCousin1.x);
+    check('nephew1 orbit center tracks cousin1\'s rotated y', rotatedNephew1.orbitCenter.y, rotatedCousin1.y);
+
+    // --- render results ---
+    const passCount = results.filter((r) => r.pass).length;
+    output.innerHTML = [
+      `<p>${passCount} / ${results.length} passed</p>`,
+      '<ul>',
+      ...results.map((r) => `<li class="${r.pass ? 'pass' : 'fail'}">${r.pass ? '✓' : '✗'} ${r.label} ${r.pass ? '' : `(expected ${r.expected}, got ${r.actual})`}</li>`),
+      '</ul>',
+    ].join('\n');
+  </script>
+</body>
+</html>
