@@ -295,7 +295,14 @@ the rests) and `STORY_DWELL_MS` are new tunable motion, not design-system values
 restarts from the beginning; otherwise it continues from the current year. Any manual touch (scrub, keys
 on the playhead, an event marker, selecting a star) stops it in place; the button toggles pause. Under
 reduced motion it hops event-to-event and rests on each (no gliding years). Announces start, each event,
-pause and finish via the live region.
+pause and finish via the live region. **Smoothed on request**: `storyStateAt` originally floored the
+travelling year to a whole number, so the playhead only actually moved once every `STORY_MS_PER_YEAR`
+(260ms) and visibly hopped between ticks instead of gliding. It now returns a fractional year while
+travelling (whole only while resting), and `timelineRibbon.js`'s `updatePlayhead(displayYear)` uses
+that raw fractional value to position the playhead every animation frame, while still only rounding
+to commit the whole year, emit `playheadChanged`, and fade the sky (`requestYear`) — so the star map's
+fade cadence and the "N of 24 in the sky" announcements are unchanged, only the needle's own motion
+got smoother.
 
 **Placeholder Then & Now for everyone (added on request)**: every one of the 24 people in `family.json`
 now has one `thenNow` memory so the slider is reachable from any card (before, only Me! and Grandmother

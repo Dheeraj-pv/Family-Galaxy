@@ -220,12 +220,16 @@ function refreshEvents() {
   if (focusedId) axisEl.querySelector(`[data-event-id="${focusedId}"]`)?.focus();
 }
 
-function updatePlayhead() {
-  yearEl.textContent = String(year);
-  playheadEl.style.setProperty('--x', `${xForYear(year)}px`);
-  playheadEl.setAttribute('aria-valuenow', String(year));
-  const here = events.filter((e) => e.year === year).map((e) => e.label);
-  playheadEl.setAttribute('aria-valuetext', here.length ? `${year}: ${here.join(', ')}` : String(year));
+// `displayYear` (default: the committed whole `year`) lets story mode glide the playhead's pixel
+// position smoothly between whole years without touching the committed year itself — everything
+// that only makes sense per whole year (the big number, aria state, event lookups) still rounds.
+function updatePlayhead(displayYear = year) {
+  const shown = Math.round(displayYear);
+  yearEl.textContent = String(shown);
+  playheadEl.style.setProperty('--x', `${xForYear(displayYear)}px`);
+  playheadEl.setAttribute('aria-valuenow', String(shown));
+  const here = events.filter((e) => e.year === shown).map((e) => e.label);
+  playheadEl.setAttribute('aria-valuetext', here.length ? `${shown}: ${here.join(', ')}` : String(shown));
 }
 
 function keepPlayheadVisible() {
@@ -382,7 +386,8 @@ function tickStory(now) {
   if (!story) return;
   const state = storyStateAt(story.plan, now - story.startTime);
   if (state.year !== null) {
-    requestYear(state.year);
+    requestYear(state.year); // commits + emits playheadChanged only when the whole year changes
+    updatePlayhead(state.year); // repaints every frame at the fractional position for a smooth glide
     keepPlayheadVisible();
   }
   if (state.resting && state.year !== story.lastStopYear) {

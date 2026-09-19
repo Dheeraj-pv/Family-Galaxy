@@ -45,7 +45,11 @@ export function buildStoryPlan({ startYear, endYear, eventYears = [], jump = fal
 }
 
 // Where the story is `elapsedMs` after it began: { year, resting, done }. `resting` is true while
-// the playhead sits on an event year (the caption should show). Years are whole numbers.
+// the playhead sits on an event year (the caption should show). Years are whole numbers while
+// resting, but fractional while travelling — the caller is expected to round for anything that
+// only makes sense per whole year (the big year number, who's present) while using the raw value
+// for anything that should glide smoothly (the playhead's on-screen position), rather than this
+// function flooring it and forcing the playhead to visibly hop once per year.
 export function storyStateAt(plan, elapsedMs) {
   const { segments, totalMs } = plan;
   if (segments.length === 0) return { year: null, resting: false, done: true };
@@ -56,7 +60,7 @@ export function storyStateAt(plan, elapsedMs) {
   const segment = segments.find((s) => t < s.endMs) ?? segments[segments.length - 1];
   if (segment.kind === 'rest') return { year: segment.toYear, resting: true, done: false };
   const progress = (t - segment.startMs) / (segment.endMs - segment.startMs);
-  const year = Math.floor(segment.fromYear + progress * (segment.toYear - segment.fromYear));
+  const year = segment.fromYear + progress * (segment.toYear - segment.fromYear);
   return { year, resting: false, done: false };
 }
 
