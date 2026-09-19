@@ -11,7 +11,7 @@
 import { setBackgroundInert } from '../a11y/modalInert.js';
 import { announce } from '../a11y/announcer.js';
 import { hasSupabaseConfig } from '../data/supabaseClient.js';
-import { uploadPhoto, savePersonPhoto } from '../data/cloudStore.js';
+import { uploadPhoto, savePersonPhoto, deletePhotoObject } from '../data/cloudStore.js';
 import { validateImageFile, resizeImageFile } from '../utils/imageUpload.js';
 
 const PHOTO_DIR = 'assets/photos/';
@@ -135,27 +135,30 @@ export function openThenNowSlider({ then, now, caption = '', title = '', personI
   }));
 }
 
+// Puts a layer into its warm labelled-placeholder state — shared by the initial-load path
+// (attachImage, below) and by "Remove photo", which ends at exactly the same state.
+function showPlaceholder(layerEl, which) {
+  layerEl.classList.add('is-placeholder');
+  layerEl.querySelector('img')?.remove();
+  if (!layerEl.querySelector('.then-now__placeholder')) {
+    const ph = document.createElement('span');
+    ph.className = 'then-now__placeholder font-hand';
+    ph.setAttribute('aria-hidden', 'true'); // decorative stand-in; the slider itself carries the meaning
+    ph.textContent = which === 'then' ? 'a photo from then…' : 'a photo from now…';
+    layerEl.appendChild(ph);
+  }
+}
+
 // A missing/broken photo is expected while the family is still adding theirs — show a warm
 // labelled placeholder instead of a broken-image icon, and keep the slider fully usable.
 // `onSettled`, if given, fires once it's known whether this side ended up as a real photo or a
 // placeholder (immediately for "no name at all"; after load/error for a real `name`) — the
-// upload control's "Add a real photo" / "Replace this photo" label depends on knowing which.
+// upload control's button labels depend on knowing which.
 function attachImage(layerEl, name, which, title, onSettled) {
   const img = layerEl.querySelector('img');
-  const showPlaceholder = () => {
-    layerEl.classList.add('is-placeholder');
-    img.remove();
-    if (!layerEl.querySelector('.then-now__placeholder')) {
-      const ph = document.createElement('span');
-      ph.className = 'then-now__placeholder font-hand';
-      ph.setAttribute('aria-hidden', 'true'); // decorative stand-in; the slider itself carries the meaning
-      ph.textContent = which === 'then' ? 'a photo from then…' : 'a photo from now…';
-      layerEl.appendChild(ph);
-    }
-    onSettled?.();
-  };
-  if (!name) { showPlaceholder(); return; }
-  img.addEventListener('error', showPlaceholder, { once: true });
+  const settlePlaceholder = () => { showPlaceholder(layerEl, which); onSettled?.(); };
+  if (!name) { settlePlaceholder(); return; }
+  img.addEventListener('error', settlePlaceholder, { once: true });
   img.addEventListener('load', () => onSettled?.(), { once: true });
   img.alt = title ? `${title}, ${which}` : which === 'then' ? 'Then' : 'Now';
   img.src = photoUrl(name);
@@ -176,23 +179,24 @@ function showRealPhoto(layerEl, url, which, title) {
   img.src = url;
 }
 
-// A small "Add/Replace a real photo" button per side (only when Supabase is configured and a
-// personId is known — see CLAUDE.md "Cloud sync"), sitting at the stage's own bottom corner
-// (not inside the clipped .then-now__layer--then) so it's never affected by the divider. The
-// file itself is resized in the browser and uploaded straight to Storage on selection — there's
-// no separate "save" step, since replacing a memory's photo isn't something you'd want to undo
-// by just closing the dialog.
+// A small "Add/Replace a real photo" + "Remove photo" control per side (only when Supabase is
+// configured and a personId is known — see CLAUDE.md "Cloud sync"), sitting at the stage's own
+// bottom corner (not inside the clipped .then-now__layer--then) so it's never affected by the
+// divider. Upload resizes the file in the browser and writes straight to Storage on selection —
+// no separate "save" step, since replacing a memory's photo isn't something you'd want to undo by
+// just closing the dialog. Remove asks first, inline ("Remove this photo? Keep / Remove"), the
+// same pattern the postcard corkboard uses (postcardFlip.js's createActionRow) for the same
+// reason: this is a live, shared photo, not a form field you can just cancel out of.
 function buildUploadControl(stage, personId, which, title) {
   const wrap = document.createElement('div');
   wrap.className = `then-now__upload then-now__upload--${which}`;
+  const label = which === 'then' ? 'Then' : 'Now';
 
-  const button = document.createElement('button');
-  button.type = 'button';
-  button.className = 'then-now__upload-btn small-caps';
+  const row = document.createElement('div');
+  row.className = 'then-now__upload-actions';
+
   const layerEl = stage.querySelector(`.then-now__layer--${which}`);
   const isPlaceholder = () => layerEl.classList.contains('is-placeholder');
-  const refreshLabel = () => { button.textContent = isPlaceholder() ? 'Add a real photo' : 'Replace this photo'; };
-  refreshLabel();
 
   const input = document.createElement('input');
   input.type = 'file';
@@ -202,7 +206,77 @@ function buildUploadControl(stage, personId, which, title) {
   const status = document.createElement('p');
   status.className = 'then-now__upload-status small-caps';
 
-  button.addEventListener('click', () => input.click());
+  const setBusy = (busy) => { [...row.querySelectorAll('button')].forEach((b) => { b.disabled = busy; }); };
+
+  function renderButtons(focusRemove = false) {
+    row.textContent = '';
+    row.removeAttribute('role');
+    row.removeAttribute('aria-labelledby');
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'then-now__upload-btn small-caps';
+    button.textContent = isPlaceholder() ? 'Add a real photo' : 'Replace this photo';
+    button.addEventListener('click', () => input.click());
+    row.appendChild(button);
+    if (!isPlaceholder()) {
+      const removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.className = 'then-now__upload-remove small-caps';
+      removeBtn.textContent = 'Remove photo';
+      removeBtn.addEventListener('click', showConfirm);
+      row.appendChild(removeBtn);
+      if (focusRemove) removeBtn.focus();
+    }
+  }
+
+  function showConfirm() {
+    row.textContent = '';
+    const qid = `then-now-confirm-${which}-${Math.random().toString(36).slice(2, 8)}`;
+    const question = document.createElement('span');
+    question.className = 'then-now__upload-question small-caps';
+    question.id = qid;
+    question.textContent = `Remove this ${label.toLowerCase()} photo?`;
+    const keep = document.createElement('button');
+    keep.type = 'button';
+    keep.className = 'then-now__upload-btn small-caps';
+    keep.textContent = 'Keep';
+    keep.addEventListener('click', () => renderButtons(true));
+    const confirmRemove = document.createElement('button');
+    confirmRemove.type = 'button';
+    confirmRemove.className = 'then-now__upload-remove small-caps';
+    confirmRemove.textContent = 'Remove';
+    confirmRemove.setAttribute('aria-describedby', qid);
+    confirmRemove.addEventListener('click', doRemove);
+    row.setAttribute('role', 'group');
+    row.setAttribute('aria-labelledby', qid);
+    row.append(question, keep, confirmRemove);
+    keep.focus(); // the safe choice is the default
+    announce(`Remove the ${label.toLowerCase()} photo? Keep or Remove.`, { delay: 0 });
+  }
+
+  async function doRemove() {
+    status.textContent = 'Removing…';
+    setBusy(true);
+    try {
+      await deletePhotoObject('then-now', `${personId}-${which}.jpg`);
+      await savePersonPhoto(personId, which, null);
+      showPlaceholder(layerEl, which);
+      status.textContent = '';
+      renderButtons();
+      announce(`${label} photo removed.`, { delay: 300 });
+    } catch (err) {
+      status.textContent = 'Couldn’t remove that photo — mind trying again?';
+      setBusy(false);
+    }
+  }
+
+  row.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && row.querySelector('.then-now__upload-question')) {
+      e.stopPropagation(); // cancel the confirmation, not the whole slider
+      renderButtons(true);
+    }
+  });
+
   input.addEventListener('change', async () => {
     const file = input.files[0];
     input.value = '';
@@ -210,7 +284,7 @@ function buildUploadControl(stage, personId, which, title) {
     const check = validateImageFile(file);
     if (!check.ok) { status.textContent = check.reason; return; }
     status.textContent = 'Saving…';
-    button.disabled = true;
+    setBusy(true);
     try {
       const { blob } = await resizeImageFile(file);
       const result = await uploadPhoto('then-now', `${personId}-${which}.jpg`, blob);
@@ -218,17 +292,18 @@ function buildUploadControl(stage, personId, which, title) {
       showRealPhoto(layerEl, result.url, which, title);
       await savePersonPhoto(personId, which, result.url);
       status.textContent = '';
-      refreshLabel();
-      announce(`${which === 'then' ? 'Then' : 'Now'} photo updated.`, { delay: 300 });
+      renderButtons();
+      announce(`${label} photo updated.`, { delay: 300 });
     } catch (err) {
       status.textContent = 'Couldn’t read that photo — try a different one?';
     } finally {
-      button.disabled = false;
+      setBusy(false);
     }
   });
 
-  wrap.append(button, input, status);
-  return { wrap, refreshLabel };
+  renderButtons();
+  wrap.append(row, input, status);
+  return { wrap, refreshLabel: renderButtons };
 }
 
 function onModalKeydown(e) {
@@ -239,7 +314,9 @@ function onModalKeydown(e) {
   }
   if (e.key !== 'Tab') return;
   // Focus trap: handle + close, plus any upload buttons when they're present.
-  const stops = [...modalEl.querySelectorAll('.then-now__handle, .then-now__close, .then-now__upload-btn')];
+  const stops = [...modalEl.querySelectorAll(
+    '.then-now__handle, .then-now__close, .then-now__upload-btn, .then-now__upload-remove',
+  )];
   const first = stops[0];
   const last = stops[stops.length - 1];
   if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }

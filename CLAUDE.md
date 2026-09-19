@@ -406,9 +406,10 @@ shared, provider-agnostic piece (`validateImageFile`, `resizeImageFile` — resi
 in the browser via `canvas`, capped at 1600px long edge, before anything is uploaded) used by both
 features below. **Postcards**: `addPostcard.js` gets an optional photo field, uploaded to the
 `postcards` bucket keyed by the postcard's own id, only at submit time — choosing a photo and then
-cancelling the form never touches the network. **Then & Now**: `thenNowSlider.js` gets a small
-"Add a real photo" / "Replace this photo" control per side (only when `hasSupabaseConfig()` and a
-`personId` are both available), uploaded to the `then-now` bucket keyed by `<personId>-then.jpg` /
+cancelling the form never touches the network; "Remove photo" there just clears the field until
+submit, since nothing is live yet. **Then & Now**: `thenNowSlider.js` gets a small "Add a real
+photo" / "Replace this photo" control per side (only when `hasSupabaseConfig()` and a `personId`
+are both available), uploaded to the `then-now` bucket keyed by `<personId>-then.jpg` /
 `<personId>-now.jpg` and saved to the `person_photos` table via `savePersonPhoto`, which merges only
 the one column touched so replacing one side never clobbers the other; `getCloudPhotoFor(personId)`
 (`cloudSync.js`) then overrides the placeholder filenames from `family.json` wherever a real cloud
@@ -417,13 +418,21 @@ filename when replacing an existing photo, the public URL Supabase returns is ot
 byte-identical after a re-upload, and browsers (including the one that just uploaded it) would keep
 serving the old cached bytes at that same URL — `uploadPhoto()` (`cloudStore.js`) appends a
 `?v=<timestamp>` cache-busting suffix to every URL it returns/stores specifically to defeat that;
-found and fixed via live testing of the "Replace this photo" flow. `person_photos` deliberately has
-no `DELETE` policy — neither feature ever deletes a row there, only updates a column to a new URL (or,
-for a postcard being edited, to `null` via "Remove photo"), so there was nothing that needed one.
-Verified live against a real Supabase project (not just the unit tests): two-tab realtime
-propagation for postcards and moments including reassignment/deletion, postcard photo upload/edit/
-remove, and Then & Now upload/replace on both sides with the fix confirmed and cross-session
-persistence via `getCloudPhotoFor` confirmed on reopen.
+found and fixed via live testing of the "Replace this photo" flow. **Remove photo (added on
+request)**: since a Then & Now photo is live and shared the moment it's uploaded — unlike the
+postcard form's field, there's no "cancel" to fall back on — removing one asks first, inline
+("Remove this photo? Keep / Remove"), the same pattern `postcardFlip.js`'s `createActionRow` uses
+for deleting a postcard, and for the same reason: no browser `confirm()` popup, stays in the
+slider's own voice, works with screen readers. Confirming calls the new `deletePhotoObject(bucket,
+path)` (`cloudStore.js`) to actually remove the Storage object, then `savePersonPhoto(personId,
+which, null)` to clear that column, then reverts the layer to its placeholder in place. `storage.
+objects` has an open `DELETE` policy already (`supabase/storage.sql`) for exactly this; `person_
+photos` itself still has none, since nothing deletes the *row* — a removed photo is a `null` column,
+not a missing one. Verified live against a real Supabase project (not just the unit tests): two-tab
+realtime propagation for postcards and moments including reassignment/deletion, postcard photo
+upload/edit/remove, Then & Now upload/replace on both sides with the cache-busting fix confirmed,
+Then & Now remove-photo confirmed to clear the Storage object and the database column and revert to
+the placeholder, and cross-session persistence via `getCloudPhotoFor` confirmed on reopen after each.
 
 **Known gaps / open items**: (1) nothing has been tried on real touch hardware or with a real screen
 reader; (2) no real photos have been uploaded yet — the placeholders are still placeholders until a

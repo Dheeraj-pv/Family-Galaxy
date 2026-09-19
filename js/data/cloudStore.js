@@ -104,6 +104,17 @@ export async function uploadPhoto(bucket, path, blob) {
   return { ok: true, url: `${data.publicUrl}?v=${Date.now()}` };
 }
 
+// Deletes an uploaded photo from Storage (e.g. "Remove photo" on a Then & Now side). Storage's own
+// RLS policies are open for delete same as select/insert/update (see supabase/storage.sql) — this
+// is separate from person_photos/postcards' own row, which the caller updates on its own.
+export async function deletePhotoObject(bucket, path) {
+  const client = await getSupabase();
+  if (!client) return { ok: false };
+  const { error } = await client.storage.from(bucket).remove([path]);
+  if (error) { warn('deletePhotoObject', error); return { ok: false, error }; }
+  return { ok: true };
+}
+
 // ---- realtime -----------------------------------------------------------------------------
 // One shared subscription for all three tables. `handlers` gets `{ eventType, table, new, old }`
 // for every insert/update/delete anyone (including this tab) makes. Returns an unsubscribe fn.

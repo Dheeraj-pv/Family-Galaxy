@@ -119,7 +119,15 @@
 }
 .then-now__upload--then { left: 10px; }
 .then-now__upload--now { right: 10px; }
-.then-now__upload-btn {
+.then-now__upload-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.then-now__upload-btn,
+.then-now__upload-remove {
   padding: 5px 10px;
   border: 1px solid rgba(255, 255, 255, 0.4);
   border-radius: 999px;
@@ -129,8 +137,22 @@
   cursor: pointer;
 }
 .then-now__upload-btn:hover { background: rgba(10, 14, 39, 0.75); }
-.then-now__upload-btn:disabled { opacity: 0.6; cursor: default; }
-.then-now__upload-btn:focus-visible { outline: 2px solid var(--color-star-gold); outline-offset: 2px; }
+.then-now__upload-btn:disabled,
+.then-now__upload-remove:disabled { opacity: 0.6; cursor: default; }
+.then-now__upload-btn:focus-visible,
+.then-now__upload-remove:focus-visible { outline: 2px solid var(--color-star-gold); outline-offset: 2px; }
+/* Remove echoes the postcard corkboard's rose "delete" accent (postcards.css), so the destructive
+   action reads the same way everywhere it appears. */
+.then-now__upload-remove { color: var(--color-shared); border-color: rgba(251, 113, 133, 0.5); }
+.then-now__upload-remove:hover { background: rgba(251, 113, 133, 0.12); }
+.then-now__upload-question {
+  display: block;
+  width: 100%;
+  margin-bottom: 2px;
+  font-size: 0.65rem;
+  color: var(--color-text-secondary);
+  text-shadow: 0 1px 2px rgba(10, 14, 39, 0.8);
+}
 .then-now__upload-status {
   min-height: 1em;
   margin: 4px 0 0;
