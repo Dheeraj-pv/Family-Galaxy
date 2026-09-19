@@ -92,6 +92,10 @@ export function openThenNowSlider({ then, now, caption = '', title = '', personI
 
   let dragging = false;
   stage.addEventListener('pointerdown', (e) => {
+    // The upload controls live inside the stage (so they can sit at its own corners); without
+    // this check a press on one of them was captured here first and read as a divider drag,
+    // stealing the click before the button ever saw it.
+    if (e.target.closest('.then-now__upload')) return;
     dragging = true;
     try { stage.setPointerCapture(e.pointerId); } catch (err) { /* synthetic pointers can throw; dragging still works */ }
     setPosition(percentFromPointer(e.clientX, stage.getBoundingClientRect()));
