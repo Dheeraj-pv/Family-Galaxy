@@ -2,7 +2,11 @@
 
 A frontend-only, single-page family history site: relatives are stars in a night sky, memories are
 before/after photo sliders, postcards are flippable corkboard notes, and a bottom timeline scrubber
-ages the whole sky through the decades. No backend. No build step required. Handmade over slick.
+ages the whole sky through the decades. No build step required. Handmade over slick. **The site
+itself is still a static frontend deployable to GitHub Pages** — but as of the "Cloud sync" section
+below, it talks to a small free Supabase backend (Postgres + Storage) so postcards, timeline moments,
+and Then & Now photos are shared and persist beyond one browser's `localStorage`, on request after the
+user raised that local-only data couldn't be seen or added to by anyone else.
 
 ## Emotional intent (the actual spec — weigh every decision against this)
 
@@ -36,12 +40,18 @@ They are one interlocking single-page experience, not four pages:
 
 ## Non-negotiable technical constraints (do not cross without asking first)
 
-- **Frontend only** — no backend, server, auth, database, or real-time sync.
+- **Frontend only, no build step, no auth** — plain HTML/CSS/JS, deployable as static files
+  (GitHub Pages-class hosting). **Amended on request (see "Cloud sync" below)**: the site does now
+  talk to a Supabase project for shared/synced data and photo storage — this was a deliberate,
+  user-requested exception to the original "no backend, no database" line, made because local-only
+  data couldn't be seen or added to by anyone but the one browser that wrote it. It's still not a
+  server the site depends on to load or render (`hasSupabaseConfig()` false → the whole app still
+  works, `localStorage`-only, exactly as before) — treat *adding a second, different* backend
+  dependency, or requiring login/auth, as still needing to be asked about first.
 - **No 3D engines** (Three.js, Babylon, etc.) — canvas 2D, SVG, or CSS 3D transforms only.
-- **No build step required** — plain HTML/CSS/JS. A lightweight framework (Svelte/Alpine) only if the
-  user asks for it.
-- **Data lives in two places**: `family.json` (static structure) and `localStorage` (user-added
-  postcards/events/preferences). No other persistence.
+- **Data lives in three places**: `family.json` (static structure), `localStorage` (this browser's
+  cache of user-added postcards/events/photos, and the offline fallback), and, when configured,
+  Supabase Postgres + Storage (the shared source of truth others also see — see "Cloud sync").
 - **Hosting target**: static host (GitHub Pages-class). Total site < 100MB, individual files < 25MB.
 - **Accessible**: stars keyboard-navigable (Tab + Enter), WCAG AA text contrast, `prefers-reduced-motion`
   disables twinkle/bob/parallax/orbital drift, screen readers get hidden DOM mirrors of canvas-rendered
@@ -207,8 +217,8 @@ the rest of the header) and the Postcards tab has its own "+ Add a postcard" pre
 person. `postcardMarkers.js` draws a bobbing envelope (±4px, 6s, frozen under reduced motion)
 beside any star with postcards. `from` may be a person id (family.json) or a free-typed name.
 Reduced motion swaps the 3D flip for a 120ms face cross-fade. Corkboard has no cork-brown — no
-such token exists, so postcards sit on the card's own midnight surface. **Not built**: photo
-upload (frontend-only + localStorage size). Tests:
+such token exists, so postcards sit on the card's own midnight surface. Photo upload was added
+later — see "Photo uploads" below. Tests:
 `tests/test-postcard-flip.html`.
 
 **Timeline lens (build step 12)**: `js/timeline/timelineFilter.js` is pure (tests:
@@ -355,8 +365,70 @@ each branch/row/postcard/moment. The ink reads fine even where a browser drops t
 Not verified against real printed output or a saved PDF — only the on-screen result of applying the
 print rules was checked, so pagination is estimated, not observed.
 
-**Known gaps / open items**: (1) postcards can't carry uploaded photos;
-(2) no real photos exist yet; (3) nothing has been tried on real touch hardware or with a real screen reader.
+**Cloud sync (added on request)**: the user pointed out that `localStorage`-only data couldn't be
+seen or added to by anyone but the one browser that wrote it, and asked for a free backend that kept
+GitHub Pages hosting — the site is still fully static; only its data layer gained a network call.
+Firebase was tried first (Firestore + Storage, photo upload, open write access, all on request) but
+was dropped after discovering Firebase Storage now requires the card-linked Blaze plan even at $0
+actual usage (a Feb 2026 policy change) — the user caught this and asked to **switch to Supabase**
+instead (Postgres + Storage, genuinely free, no card, at the cost of free projects pausing after 7
+days of inactivity — accepted, and resumed manually from the Supabase dashboard if it happens).
+Setup lives in `supabase/schema.sql` (the `postcards`/`events`/`person_photos` tables, with `CHECK`
+constraints doing the validation Postgres can enforce, plus each table added to the
+`supabase_realtime` publication) and `supabase/storage.sql` (`postcards` and `then-now` public
+Storage buckets, 8MB file-size limit, image-only MIME allow-list); run both once in a fresh project's
+SQL editor, then fill `js/data/supabaseConfig.js`'s `url`/`anonKey` from Project Settings → API — both
+values are meant to be public in client code (Supabase's own docs say so; Row Level Security is the
+real boundary, not secrecy), and every RLS policy here is deliberately open
+(`using(true)`/`with check(true)`) with **no login** — anyone with the link can add, edit, or delete
+a postcard/moment or upload a photo, the same "anyone with the link can write" the user asked for,
+accepted with the understanding that this also means anyone with the link could vandalize it.
+`js/data/supabaseClient.js` lazily loads the `@supabase/supabase-js` SDK from jsDelivr's `+esm` build
+(no npm install, no build step) and every function in `js/data/cloudStore.js` (the only file that
+talks to Supabase directly) no-ops to "saved on this device only for now" — never throws — when
+`hasSupabaseConfig()` is false, so the app works exactly as before with no config filled in.
+`js/data/cloudModel.js` is the pure row-shape ↔ app-shape translation (tested in
+`tests/test-cloud-model.html`), mirroring the project's existing pure/impure split (compare
+`postcardModel.js` vs `postcardActions.js`). `js/data/cloudSync.js` is the orchestration: on
+`dataReady` it reconciles once — pushes any local-only user-added postcards/moments up, pulls every
+cloud row down — then opens one realtime subscription for the rest of the session.
+`postcardActions.js`/`eventActions.js` keep their exact previous behavior (local mutate + localStorage
++ bus event, synchronous, so the UI never waits on the network) and now also fire the matching
+`cloudStore` save/delete afterward, un-awaited. Incoming realtime changes are applied **self-healingly**
+rather than trusting the payload's own bookkeeping: reassigning a postcard to a new person scans
+*every* person and strips the postcard from anyone who isn't the new owner, and a delete removes it
+from every person holding it — found necessary via live two-tab testing, where Postgres's default
+replica identity doesn't include a changed non-key column (like the old owner) in an `UPDATE`'s `old`
+row, which could otherwise leave a stale duplicate in another open tab.
+
+**Photo uploads (added on request, part of the same work)**: `js/utils/imageUpload.js` is the one
+shared, provider-agnostic piece (`validateImageFile`, `resizeImageFile` — resizes/re-encodes to JPEG
+in the browser via `canvas`, capped at 1600px long edge, before anything is uploaded) used by both
+features below. **Postcards**: `addPostcard.js` gets an optional photo field, uploaded to the
+`postcards` bucket keyed by the postcard's own id, only at submit time — choosing a photo and then
+cancelling the form never touches the network. **Then & Now**: `thenNowSlider.js` gets a small
+"Add a real photo" / "Replace this photo" control per side (only when `hasSupabaseConfig()` and a
+`personId` are both available), uploaded to the `then-now` bucket keyed by `<personId>-then.jpg` /
+`<personId>-now.jpg` and saved to the `person_photos` table via `savePersonPhoto`, which merges only
+the one column touched so replacing one side never clobbers the other; `getCloudPhotoFor(personId)`
+(`cloudSync.js`) then overrides the placeholder filenames from `family.json` wherever a real cloud
+photo exists, read by `profileCard.js`'s `renderMemories`. Because both features reuse a **fixed**
+filename when replacing an existing photo, the public URL Supabase returns is otherwise
+byte-identical after a re-upload, and browsers (including the one that just uploaded it) would keep
+serving the old cached bytes at that same URL — `uploadPhoto()` (`cloudStore.js`) appends a
+`?v=<timestamp>` cache-busting suffix to every URL it returns/stores specifically to defeat that;
+found and fixed via live testing of the "Replace this photo" flow. `person_photos` deliberately has
+no `DELETE` policy — neither feature ever deletes a row there, only updates a column to a new URL (or,
+for a postcard being edited, to `null` via "Remove photo"), so there was nothing that needed one.
+Verified live against a real Supabase project (not just the unit tests): two-tab realtime
+propagation for postcards and moments including reassignment/deletion, postcard photo upload/edit/
+remove, and Then & Now upload/replace on both sides with the fix confirmed and cross-session
+persistence via `getCloudPhotoFor` confirmed on reopen.
+
+**Known gaps / open items**: (1) nothing has been tried on real touch hardware or with a real screen
+reader; (2) no real photos have been uploaded yet — the placeholders are still placeholders until a
+family member actually uses the upload controls; (3) a Supabase free-tier project pauses after 7 days
+with no traffic and needs manually resuming from the dashboard if that happens.
 
 **Rendering technology (decided)**: **Canvas 2D**, not SVG or DOM — this is the only reading that makes
 the accessibility rule's literal "hidden DOM mirrors of canvas-rendered content" wording true. All mockup
